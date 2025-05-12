@@ -6,8 +6,8 @@ Thank you for considering contributing to this project!
 
 1. Clone the repository:
    ```bash
-   git clone <repository-url>
-   cd 360-audio-driven-xr-player
+   git clone https://github.com/onomono-design/2025-05-11-XR-PLAYER.git
+   cd 2025-05-11-XR-PLAYER
    ```
 
 2. Start the development server:
@@ -52,4 +52,4 @@ Before submitting changes, please test in the following browsers:
 2. Create a pull request explaining:
    - What the change does
    - Why it's needed
-   - Any browser-specific considerations 
+   - Any browser-specific considerations
