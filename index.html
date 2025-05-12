@@ -358,6 +358,9 @@ window.addEventListener('DOMContentLoaded',()=>{
  vs.src=XR_src;
  video.load();
  
+ // Always ensure video is muted regardless of other settings
+ video.muted = true;
+ 
  // Ensure videosphere is visible
  videosphere.setAttribute('visible', 'true');
  
@@ -368,6 +371,24 @@ window.addEventListener('DOMContentLoaded',()=>{
  });
  
  audio.innerHTML=`<source src="${audio_src}" type="audio/mpeg">`;
+ // Apply custom controls to audio element
+ audio.controlsList = "nodownload nofullscreen noremoteplayback";
+ // Disable playback rate controls via CSS
+ const styleEl = document.createElement('style');
+ styleEl.textContent = `
+   #audioPlayer::-webkit-media-controls-timeline-container { display: flex !important; }
+   #audioPlayer::-webkit-media-controls-play-button { display: flex !important; }
+   #audioPlayer::-webkit-media-controls-current-time-display { display: flex !important; }
+   #audioPlayer::-webkit-media-controls-time-remaining-display { display: flex !important; }
+   #audioPlayer::-webkit-media-controls-mute-button { display: flex !important; }
+   #audioPlayer::-webkit-media-controls-volume-slider { display: flex !important; }
+   #audioPlayer::-webkit-media-controls-toggle-closed-captions-button { display: none !important; }
+   #audioPlayer::-webkit-media-controls-fullscreen-button { display: none !important; }
+   #audioPlayer::-webkit-media-controls-download-button { display: none !important; }
+   #audioPlayer::-webkit-media-controls-overflow-button { display: none !important; }
+   #audioPlayer::-webkit-media-controls-playback-rate-button { display: none !important; }
+ `;
+ document.head.appendChild(styleEl);
  art.src=thumbnail_src;
  track.textContent=`Chapter ${chapterOrder} – ${chapterName} | ${tourName}`;
  let teaser=isTeaser,xrAllowed=isXR||teaser,xrMode=false;
@@ -527,25 +548,69 @@ window.addEventListener('DOMContentLoaded',()=>{
    }
  });
  
+ // Add seeking event to keep video in sync when user scrubs audio
+ audio.addEventListener('seeking', () => {
+   if (xrMode && videoReady) {
+     video.currentTime = audio.currentTime;
+   }
+ });
+ 
+ audio.addEventListener('seeked', () => {
+   if (xrMode && videoReady) {
+     // Ensure video and audio are synchronized after seeking finishes
+     video.currentTime = audio.currentTime;
+     
+     // Ensure appropriate playback state
+     if (!audio.paused && video.paused) {
+       video.play().catch(e => {
+         console.error("Video play after seek error:", e);
+         // Try with muted as fallback
+         video.muted = true;
+         video.play().catch(e => console.error("Muted play after seek failed:", e));
+       });
+     }
+   }
+ });
+ 
+ // Create a throttled sync function to prevent too frequent synchronization
+ const syncVideoToAudio = (() => {
+   let lastSyncTime = 0;
+   return () => {
+     const now = Date.now();
+     // Only sync if more than 300ms have passed since last sync
+     if (now - lastSyncTime > 300 && xrMode && videoReady && !video.paused && !audio.paused) {
+       if (Math.abs(video.currentTime - audio.currentTime) > 0.2) {
+         video.currentTime = audio.currentTime;
+         lastSyncTime = now;
+       }
+     }
+   };
+ })();
+ 
+ // Add a periodic sync check to catch drift
+ const syncInterval = setInterval(syncVideoToAudio, 2000);
+ 
+ // Cleanup interval on page unload
+ window.addEventListener('beforeunload', () => {
+   clearInterval(syncInterval);
+ });
+ 
  audio.addEventListener('play',()=>{
    if(xrMode&&videoReady) {
-     // Try to play with sound first
-     video.muted = false;
+     // First ensure times are synced before playing
+     video.currentTime = audio.currentTime;
+     
+     // Always ensure video is muted - video should never have sound
+     video.muted = true;
+     
      video.play().catch((e)=>{
        console.error("Video play error:", e);
-       // Fall back to muted playback
-       video.muted = true;
-       video.play().catch(e => {
-         console.error("Muted play failed:", e);
-         
-         // Final fallback attempt - try with a user interaction simulation
-         setTimeout(() => {
-           if(isMobile) {
-             video.muted = true;
-             video.play().catch(e => console.error("Final play attempt failed:", e));
-           }
-         }, 1000);
-       });
+       // Retry play attempt if failed
+       setTimeout(() => {
+         if(isMobile) {
+           video.play().catch(e => console.error("Final play attempt failed:", e));
+         }
+       }, 1000);
      });
    }
  });
@@ -556,8 +621,19 @@ window.addEventListener('DOMContentLoaded',()=>{
  
  // Ensure video visibility
  document.addEventListener('visibilitychange', () => {
-   if(!document.hidden && xrMode && videoReady && !audio.paused) {
-     video.play().catch(e => console.error("Visibility play error:", e));
+   if(!document.hidden) {
+     // Only attempt to recover video if needed
+     if(xrMode && videoReady && !audio.paused && video.paused) {
+       // Ensure time is synced before playing
+       video.currentTime = audio.currentTime;
+       
+       // Always keep video muted
+       video.muted = true;
+       video.play().catch(e => {
+         console.error("Visibility play error:", e);
+         setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
+       });
+     }
      
      // For mobile, ensure videosphere is visible
      if(isMobile && videosphere) {
@@ -616,24 +692,45 @@ window.addEventListener('DOMContentLoaded',()=>{
  
  modeBtn.addEventListener('click',()=>{
    if(modeBtn.disabled)return;
+   
+   // Store the current play state and time to restore after mode change
+   const wasPlaying = !audio.paused;
+   const currentTime = audio.currentTime;
+   
+   // If playing, pause temporarily to prevent race conditions
+   if (wasPlaying) {
+     audio.pause();
+     if (!video.paused) video.pause();
+   }
+   
    recenter();
    xrMode=!xrMode;
    layout();
-   if(xrMode&&videoReady&&!audio.paused) {
-     // On mobile, first try with muted
-     if(isMobile) {
-       video.muted = true;
-     } else {
-       video.muted = false;
+   
+   // Short timeout to let the DOM update before adjusting playback
+   setTimeout(() => {
+     // Always resync time after mode change
+     if (xrMode && videoReady) {
+       video.currentTime = currentTime;
      }
      
-     video.play().catch((e)=>{
-       console.error("Mode toggle play error:", e);
-       // Try with muted as fallback
-       video.muted = true;
-       video.play().catch(e => console.error("Muted play failed:", e));
-     });
-   }
+     // Resume playback if it was playing before
+     if (wasPlaying) {
+       audio.currentTime = currentTime; // Ensure audio time is still correct
+       audio.play().then(() => {
+         if (xrMode && videoReady) {
+           // Always ensure video is muted
+           video.currentTime = audio.currentTime; // Resync one last time
+           video.muted = true;
+           
+           video.play().catch((e) => {
+             console.error("Mode toggle play error:", e);
+             setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
+           });
+         }
+       }).catch(e => console.error("Audio resume error:", e));
+     }
+   }, 50);
  });
  
  recBtn.addEventListener('click',recenter);
@@ -715,9 +812,29 @@ window.addEventListener('DOMContentLoaded',()=>{
  
  xrModeBtn.addEventListener('click', () => {
    if(teaser) return;
+   
+   // Store the current play state and time to restore after mode change
+   const wasPlaying = !audio.paused;
+   const currentTime = audio.currentTime;
+   
+   // If playing, pause temporarily to prevent race conditions
+   if (wasPlaying) {
+     audio.pause();
+     if (!video.paused) video.pause();
+   }
+   
    recenter();
    xrMode = false;
    layout();
+   
+   // Short timeout to let the DOM update before adjusting playback
+   setTimeout(() => {
+     // Resume playback if it was playing before
+     if (wasPlaying) {
+       audio.currentTime = currentTime; // Ensure audio time is still correct
+       audio.play().catch(e => console.error("Audio resume error:", e));
+     }
+   }, 50);
  });
 });
 
@@ -740,6 +857,39 @@ document.addEventListener('aframeinitialized', function() {
       window.dispatchEvent(new Event('resize'));
     }
   }, 500);
+});
+
+// Add video playback rate matching to ensure smoother playback
+video.addEventListener('ratechange', () => {
+  // If audio changes speed, match video speed
+  if (xrMode && videoReady && video.playbackRate !== audio.playbackRate) {
+    video.playbackRate = audio.playbackRate;
+  }
+});
+
+// Add more robust visibility change handling
+document.addEventListener('visibilitychange', () => {
+  if(!document.hidden) {
+    // Only attempt to recover video if needed
+    if(xrMode && videoReady && !audio.paused && video.paused) {
+      // Ensure time is synced before playing
+      video.currentTime = audio.currentTime;
+      
+      // Always keep video muted
+      video.muted = true;
+      video.play().catch(e => {
+        console.error("Visibility play error:", e);
+        setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
+      });
+    }
+    
+    // For mobile, ensure videosphere is visible
+    if(isMobile && videosphere) {
+      setTimeout(() => {
+        videosphere.setAttribute('visible', 'true');
+      }, 300);
+    }
+  }
 });
 </script>
 </body>
