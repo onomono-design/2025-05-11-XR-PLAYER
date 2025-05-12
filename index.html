@@ -329,7 +329,15 @@ const PERFORMANCE = {
   // How much to reduce pixel ratio on mobile
   pixelRatioScale: isMobile ? 0.7 : 1.0,
   // Buffer size for mobile (in seconds)
-  mobileBufferSize: 30
+  mobileBufferSize: 30,
+  // NEW: Maximum sync operations per second
+  maxSyncFrequency: isMobile ? 1 : 4,
+  // NEW: Use RAF instead of setTimeout for renders
+  useRequestAnimationFrame: true,
+  // NEW: Only sync when difference exceeds this threshold (in seconds)
+  syncThreshold: isMobile ? 0.75 : 0.2,
+  // NEW: Predictive sync (use audio playback rate instead of seeking)
+  usePredictiveSync: isMobile
 };
 
 // Configure video quality for mobile devices
@@ -347,18 +355,20 @@ const configureVideoForDevice = () => {
       video.width = Math.round(1280 * PERFORMANCE.videoScale);
       video.height = Math.round(720 * PERFORMANCE.videoScale);
       
+      // NEW: Set video quality and playback hints
+      if ('playsInline' in video) video.playsInline = true;
+      if ('webkitPlaysInline' in video) video.webkitPlaysInline = true;
+      
+      // NEW: Add explicit hints for memory-efficient video playback
+      video.preload = "auto";
+      
+      // NEW: Signal to the browser this isn't a high-quality video playback
+      if ('preservesPitch' in video) video.preservesPitch = false;
+      
       // Adjust buffering strategy - this is key for mobile performance
-      // Tell the browser how much to buffer (default is often too much for mobile memory)
       try {
         // Most browsers support this, but wrap in try/catch for safety
         video.preload = "auto"; // Ensure preloading is enabled
-        
-        // Specify buffer size (not all browsers support this)
-        if ('buffered' in video) {
-          // Try to set a smaller buffer size to prevent memory issues
-          // This is a custom attribute that may not be respected by all browsers
-          video.bufferSize = PERFORMANCE.mobileBufferSize;
-        }
       } catch (e) {
         console.log("Could not set buffer parameters:", e);
       }
@@ -484,7 +494,56 @@ window.addEventListener('DOMContentLoaded',()=>{
    }
  };
  
- // Modify force render function to manage spinner state 
+ // NEW: Create an optimized renderer that uses efficient rendering techniques
+ const createOptimizedRenderer = () => {
+   if (!window.AFRAME || !AFRAME.scenes[0] || !AFRAME.scenes[0].renderer) return;
+   
+   const renderer = AFRAME.scenes[0].renderer;
+   
+   // Apply common optimizations
+   renderer.setPixelRatio(Math.min(window.devicePixelRatio * PERFORMANCE.pixelRatioScale, 1.5));
+   
+   if (isMobile) {
+     // Mobile-specific optimizations
+     renderer.shadowMap.enabled = false;
+     renderer.shadowMap.autoUpdate = false;
+     renderer.physicallyCorrectLights = false;
+     
+     // Reduce texture maximum size for mobile
+     renderer.capabilities.maxTextureSize = 2048;
+     
+     // Tell the renderer to prioritize performance over quality
+     if (renderer.debug) {
+       renderer.debug.checkShaderErrors = false;
+     }
+     
+     // NEW: Set precision to medium for mobile
+     if (renderer.capabilities) {
+       renderer.capabilities.precision = "mediump";
+     }
+     
+     // Optimize canvas context if possible
+     try {
+       const gl = renderer.getContext();
+       // Hint to the browser that we prefer performance over quality
+       gl.hint(gl.GENERATE_MIPMAP_HINT, gl.FASTEST);
+       
+       // Reduce memory usage for depth and stencil buffers
+       const contextAttributes = gl.getContextAttributes();
+       if (contextAttributes && gl.getExtension('WEBGL_depth_texture')) {
+         // We can reduce depth precision safely for 360 video
+         contextAttributes.depth = false;
+         contextAttributes.stencil = false;
+       }
+     } catch (e) {
+       console.log("WebGL optimization failed:", e);
+     }
+   }
+   
+   return renderer;
+ };
+ 
+ // Modify force render function to use requestAnimationFrame and be more efficient
  const forceAFrameRender = () => {
    // Show spinner at the beginning of render attempts
    showSpinner();
@@ -492,35 +551,8 @@ window.addEventListener('DOMContentLoaded',()=>{
    if(window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
      console.log("Forcing A-Frame render");
      
-     // Apply performance settings
-     const renderer = AFRAME.scenes[0].renderer;
-     
-     // Apply texture quality settings
-     if (isMobile) {
-       // Lower texture maximum size for mobile (reduces VRAM usage)
-       renderer.capabilities.maxTextureSize = 2048;
-       
-       // On mobile, force power preference to high-performance
-       // But make it optional to avoid crashes on unsupported devices
-       if (renderer.getContext().canvas.getContext) {
-         try {
-           renderer.getContext().canvas.getContext('webgl2', { powerPreference: 'high-performance' });
-         } catch (e) {
-           console.log("Power preference setting not supported");
-         }
-       }
-       
-       // Tell the renderer to prioritize performance over quality
-       if (renderer.debug) {
-         renderer.debug.checkShaderErrors = false;
-       }
-     }
-     
-     // Force composite
-     renderer.autoClear = true;
-     
-     AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-     window.dispatchEvent(new Event('resize'));
+     // Create or get optimized renderer
+     const renderer = createOptimizedRenderer();
      
      // Explicitly check videosphere visibility
      if(videosphere) {
@@ -528,40 +560,71 @@ window.addEventListener('DOMContentLoaded',()=>{
        console.log("Ensuring videosphere visibility");
      }
      
-     // Schedule multiple renders with increasing delays - use fewer renders on mobile
-     const renderDelays = isMobile ? [100, 800] : [100, 400, 800, 1500]; 
-     let lastDelay = Math.max(...renderDelays);
-     
-     renderDelays.forEach(delay => {
-       setTimeout(() => {
-         if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-           console.log(`Scheduled render at ${delay}ms`);
-           AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-           
-           // Check videosphere visibility again during each render
-           if(videosphere) {
-             videosphere.setAttribute('visible', 'true');
-           }
-           
-           // Only hide spinner after the last render attempt or after 3 seconds have passed
-           // This helps prevent the spinner from being stuck on mobile
-           if (delay === lastDelay) {
-             // Force hide spinner after a reasonable time
-             if (isMobile) {
-               // For mobile, we'll add additional forced spinner removal
-               setTimeout(() => {
-                 if (spinnerActive) {
-                   console.log("Force hiding spinner after timeout");
-                   spinner.style.display = 'none';
-                   spinnerActive = false;
-                 }
-               }, 5000);
-             }
-             hideSpinner();
-           }
+     // NEW: Use requestAnimationFrame instead of setTimeout for more efficient rendering
+     if (PERFORMANCE.useRequestAnimationFrame) {
+       // Single initial render
+       renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+       
+       // Number of additional renders to attempt
+       const numRendersToAttempt = isMobile ? 2 : 4;
+       let rendersCompleted = 0;
+       
+       // Function to perform render in animation frame
+       const performRender = () => {
+         if (!window.AFRAME || !AFRAME.scenes[0] || !AFRAME.scenes[0].renderer) {
+           hideSpinner();
+           return;
          }
-       }, delay);
-     });
+         
+         // Perform render
+         renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+         
+         // Check videosphere visibility
+         if (videosphere) {
+           videosphere.setAttribute('visible', 'true');
+         }
+         
+         rendersCompleted++;
+         
+         // Continue rendering if needed
+         if (rendersCompleted < numRendersToAttempt) {
+           requestAnimationFrame(performRender);
+         } else {
+           // Hide spinner after all renders complete
+           hideSpinner();
+         }
+       };
+       
+       // Start render sequence
+       requestAnimationFrame(performRender);
+     } else {
+       // Fallback to setTimeout approach
+       renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+       window.dispatchEvent(new Event('resize'));
+       
+       // Schedule multiple renders with increasing delays - use fewer renders on mobile
+       const renderDelays = isMobile ? [100, 800] : [100, 400, 800, 1500]; 
+       let lastDelay = Math.max(...renderDelays);
+       
+       renderDelays.forEach(delay => {
+         setTimeout(() => {
+           if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+             console.log(`Scheduled render at ${delay}ms`);
+             AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+             
+             // Check videosphere visibility again during each render
+             if(videosphere) {
+               videosphere.setAttribute('visible', 'true');
+             }
+             
+             // Only hide spinner after the last render attempt
+             if (delay === lastDelay) {
+               hideSpinner();
+             }
+           }
+         }, delay);
+       });
+     }
    } else {
      // If A-Frame isn't ready, hide spinner after timeout
      setTimeout(hideSpinner, 800);
@@ -1010,31 +1073,115 @@ window.addEventListener('DOMContentLoaded',()=>{
    }
  });
  
- // Create a throttled sync function to prevent too frequent synchronization
- const syncVideoToAudio = (() => {
+ // NEW: Optimized video-audio sync function that avoids frequent seeking
+ // This is a key performance optimization for mobile
+ const syncVideoToAudioOptimized = (() => {
    let lastSyncTime = 0;
+   let isAdjustingPlaybackRate = false;
+   let normalizedPlaybackRate = 1.0;
+   
+   // Track if we've done a hard seek recently
+   let lastHardSeekTime = 0;
+   
    return () => {
+     if (!xrMode || !videoReady || !audio || !video) return;
+     
      const now = Date.now();
-     // Reduce sync frequency on mobile to prevent performance issues
-     // Only sync if more than 700ms have passed since last sync on mobile (was 300ms)
-     const syncInterval = isMobile ? 700 : 300;
-     if (now - lastSyncTime > syncInterval && xrMode && videoReady && !video.paused && !audio.paused) {
-       // Increase the threshold for sync to prevent constant adjustments
-       const syncThreshold = isMobile ? 0.5 : 0.2;
-       if (Math.abs(video.currentTime - audio.currentTime) > syncThreshold) {
-         video.currentTime = audio.currentTime;
-         lastSyncTime = now;
+     
+     // Don't sync too frequently 
+     const minTimeBetweenSyncs = 1000 / PERFORMANCE.maxSyncFrequency;
+     if (now - lastSyncTime < minTimeBetweenSyncs) return;
+     
+     // Skip if either media is paused
+     if (video.paused || audio.paused) return;
+     
+     // Only check sync if both are playing
+     const audioCurrent = audio.currentTime;
+     const videoCurrent = video.currentTime;
+     const syncDifference = videoCurrent - audioCurrent;
+     const absDifference = Math.abs(syncDifference);
+     
+     // If difference exceeds our threshold, we need to sync
+     if (absDifference > PERFORMANCE.syncThreshold) {
+       // Check if we can use predictive sync on mobile
+       if (PERFORMANCE.usePredictiveSync && isMobile) {
+         // Don't do hard seeks too frequently on mobile - they're very expensive
+         const timeSinceLastHardSeek = now - lastHardSeekTime;
+         const hardSeekMinInterval = 5000; // 5 seconds minimum between hard seeks
+         
+         // Only do a hard seek if the difference is very large or if enough time has passed
+         if (absDifference > 2.0 || timeSinceLastHardSeek > hardSeekMinInterval) {
+           // Do an occasional hard seek if difference is too large
+           console.log(`Hard sync: video=${videoCurrent.toFixed(2)}, audio=${audioCurrent.toFixed(2)}, diff=${syncDifference.toFixed(2)}`);
+           video.currentTime = audioCurrent;
+           lastHardSeekTime = now;
+         } else {
+           // Use playbackRate adjustment to smoothly sync without seeking
+           // This is much more efficient on mobile
+           
+           // Calculate how quickly video needs to catch up to audio
+           let newRate = 1.0;
+           
+           if (syncDifference > 0) {
+             // Video is ahead of audio, slow it down
+             // The larger the difference, the slower we play (down to 0.8x speed)
+             newRate = Math.max(0.8, 1.0 - (absDifference * 0.2));
+           } else {
+             // Video is behind audio, speed it up
+             // The larger the difference, the faster we play (up to 1.5x speed)
+             newRate = Math.min(1.5, 1.0 + (absDifference * 0.3));
+           }
+           
+           // Apply some smoothing to avoid jarring rate changes
+           normalizedPlaybackRate = normalizedPlaybackRate * 0.7 + newRate * 0.3;
+           
+           // Apply new playback rate (if supported)
+           if ('playbackRate' in video) {
+             video.playbackRate = normalizedPlaybackRate;
+             isAdjustingPlaybackRate = true;
+             
+             console.log(`Playback rate sync: ${normalizedPlaybackRate.toFixed(2)}, diff=${syncDifference.toFixed(2)}`);
+           }
+         }
+       } else {
+         // Desktop or fallback - just do normal seeking
+         console.log(`Standard sync: video=${videoCurrent.toFixed(2)}, audio=${audioCurrent.toFixed(2)}, diff=${syncDifference.toFixed(2)}`);
+         video.currentTime = audioCurrent;
        }
+     } else if (isAdjustingPlaybackRate && absDifference < (PERFORMANCE.syncThreshold * 0.5)) {
+       // If we're close enough and were adjusting rate, return to normal
+       normalizedPlaybackRate = 1.0;
+       if ('playbackRate' in video) {
+         video.playbackRate = 1.0;
+       }
+       isAdjustingPlaybackRate = false;
      }
+     
+     lastSyncTime = now;
    };
  })();
  
+ // Replace the old sync interval with our new optimized version
  // Add a periodic sync check to catch drift - less frequent on mobile
- const syncInterval = setInterval(syncVideoToAudio, isMobile ? 4000 : 2000);
+ let syncInterval;
+ const setupSyncInterval = () => {
+   // Clear any existing interval
+   if (syncInterval) {
+     clearInterval(syncInterval);
+   }
+   
+   // Create new interval with the optimized sync function
+   syncInterval = setInterval(syncVideoToAudioOptimized, isMobile ? 1000 : 500);
+ };
  
- // Cleanup interval on page unload
- window.addEventListener('beforeunload', () => {
-   clearInterval(syncInterval);
+ // Initialize our sync interval when the page loads
+ window.addEventListener('DOMContentLoaded', () => {
+   // ... existing code ...
+   
+   // Initialize sync interval
+   setupSyncInterval();
+   
+   // ... existing code ...
  });
  
  audio.addEventListener('play',()=>{
@@ -1153,7 +1300,11 @@ window.addEventListener('DOMContentLoaded',()=>{
    setTimeout(() => {
      // Always resync time after mode change
      if (xrMode && videoReady) {
+       // NEW: Use a hard seek here, it's an explicit user action
        video.currentTime = currentTime;
+       
+       // Set up new sync interval with optimized function
+       setupSyncInterval();
      }
      
      // Resume playback if it was playing before
@@ -1283,7 +1434,8 @@ window.addEventListener('DOMContentLoaded',()=>{
  });
 });
 
-// Add this after the DOM content loaded event listener but before the closing script tag
+// NEW: Optimize the THREE.js video texture handling specifically for mobile
+// Add these optimizations to the aframeinitialized event handler
 document.addEventListener('aframeinitialized', function() {
   console.log("A-Frame initialized");
   
@@ -1303,12 +1455,18 @@ document.addEventListener('aframeinitialized', function() {
           material.map.magFilter = THREE.LinearFilter; // Also optimize magnification filter
           material.map.generateMipmaps = false;
           material.map.format = THREE.RGBFormat; // Use RGB instead of RGBA if alpha isn't needed
-          material.map.needsUpdate = true;
           
-          // Optional: force texture to power-of-two dimensions for better performance
-          // material.map.image.width = nearestPowerOfTwo(material.map.image.width);
-          // material.map.image.height = nearestPowerOfTwo(material.map.image.height);
+          // NEW: Apply additional optimizations for better mobile performance
+          material.map.anisotropy = 1; // Disable anisotropic filtering
+          material.map.wrapS = THREE.ClampToEdgeWrapping;
+          material.map.wrapT = THREE.ClampToEdgeWrapping;
           
+          // Reduce update frequency for video texture on mobile
+          if (material.map.image && material.map.image === video) {
+            material.map.image._videoOptimized = true;
+          }
+          
+          material.map.needsUpdate = true;          
           material.needsUpdate = true;
           console.log("Applied texture optimizations to videosphere");
         }
@@ -1321,166 +1479,82 @@ document.addEventListener('aframeinitialized', function() {
   // Add a direct optimization for the video texture update mechanism
   if (isMobile && window.THREE) {
     try {
-      // Try to optimize how video textures update
+      // NEW: More sophisticated video texture update optimization
+      // This significantly reduces the overhead of texture updates on mobile
+      const originalVideoTextureUpdate = THREE.VideoTexture.prototype.update;
+      
       THREE.VideoTexture.prototype.update = function() {
         const video = this.image;
-        if (video.readyState >= video.HAVE_CURRENT_DATA) {
-          // Check if video is actually playing before updating texture
-          if (!video.paused && video.currentTime > 0) {
+        
+        // Skip updates if video isn't actually playing or ready
+        if (!video || video.paused || video.readyState < video.HAVE_CURRENT_DATA) {
+          return;
+        }
+        
+        // NEW: Throttle updates on mobile to reduce GPU load
+        if (video._videoOptimized) {
+          // Only update at most once per 3 frames on mobile (~20fps which is enough for 360 video)
+          if (!video._lastUpdateTime || 
+              (performance.now() - video._lastUpdateTime) > 50) { // 50ms = ~20fps
             this.needsUpdate = true;
+            video._lastUpdateTime = performance.now();
           }
+        } else {
+          // For desktop or non-optimized videos, use normal update
+          this.needsUpdate = true;
         }
       };
-      console.log("Optimized video texture update mechanism");
+      
+      console.log("Applied advanced video texture update optimization");
     } catch (e) {
       console.log("Could not optimize video texture updates:", e);
     }
   }
 
-  // Add dynamic THREE.js settings for better performance
+  // ... existing code ...
+  
+  // NEW: Additional memory optimization for THREE.js
   if (window.THREE) {
-    // Disable preserveDrawingBuffer for better performance
-    THREE.WebGLRenderer.prototype.preserveDrawingBuffer = false;
-  }
-  
-  // Configure for mobile performance
-  if (isMobile && window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-    console.log("Optimizing A-Frame for mobile");
-    
-    // Reduce render quality for mobile
-    const renderer = AFRAME.scenes[0].renderer;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio * PERFORMANCE.pixelRatioScale, 1.5));
-    
-    // Optimize renderer settings
-    renderer.shadowMap.enabled = false;
-    renderer.shadowMap.autoUpdate = false;
-    renderer.physicallyCorrectLights = false;
-    
-    // Optional: Could disable antialiasing for better performance
-    // renderer.antialias = false;
-    
-    // Apply further optimizations 
-    if (window.THREE && THREE.ShaderChunk) {
-      // Get the current scene to optimize
-      const scene = AFRAME.scenes[0].object3D;
-      
-      // Traverse the scene to optimize geometries and materials
-      scene.traverse(function(node) {
-        if (node.isMesh) {
-          // Disable frustum culling for videosphere (it's always visible)
-          if (node.parent && node.parent.type === 'VideosphereComponent') {
-            node.frustumCulled = false;
-          } else {
-            node.frustumCulled = true;
-          }
-          
-          // Disable shadows
-          node.castShadow = false;
-          node.receiveShadow = false;
-          
-          // Simplify materials
-          if (node.material) {
-            node.material.fog = false;
-            node.material.lights = false;
-          }
-        }
-      });
+    try {
+      // Dispose unused textures and materials when possible
+      if (THREE.Cache) {
+        // Limit memory usage by THREE.js asset cache
+        THREE.Cache.enabled = false;
+      }
+    } catch (e) {
+      console.log("Could not apply THREE.js memory optimizations:", e);
     }
   }
   
-  // Force another render after A-Frame is fully initialized
-  setTimeout(() => {
-    if(window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-      console.log("Post-initialization render");
-      AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-      // Trigger resize again
-      window.dispatchEvent(new Event('resize'));
-    }
-  }, 500);
-  
-  // One final attempt to hide spinner
-  setTimeout(() => {
-    if (spinnerActive) {
-      console.log("Final attempt to hide spinner after A-Frame init");
-      spinner.style.display = 'none';
-      spinnerActive = false;
-    }
-  }, 3000);
+  // ... existing code ...
 });
 
-// Add more robust visibility change handling
-document.addEventListener('visibilitychange', () => {
-  if(!document.hidden) {
-    // Only attempt to recover video if needed
-    if(xrMode && videoReady && !audio.paused && video.paused) {
-      // Ensure time is synced before playing
-      video.currentTime = audio.currentTime;
-      
-      // Always keep video muted
-      video.muted = true;
-      video.play().catch(e => {
-        console.error("Visibility play error:", e);
-        setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
-      });
-    }
-    
-    // For mobile, ensure videosphere is visible
-    if(isMobile && videosphere) {
-      setTimeout(() => {
-        videosphere.setAttribute('visible', 'true');
-      }, 300);
-    }
+// NEW: Clean up resources properly when page is unloaded
+window.addEventListener('beforeunload', () => {
+  // Clear all intervals
+  if (syncInterval) clearInterval(syncInterval);
+  if (bufferMonitorInterval) clearInterval(bufferMonitorInterval);
+  
+  // Release video resources explicitly
+  if (video) {
+    video.pause();
+    video.src = '';
+    video.load();
   }
-});
-
-// Add some memory management
-window.addEventListener('visibilitychange', () => {
-  // When app goes to background on mobile, reduce memory usage
-  if (document.hidden && isMobile) {
-    if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-      // Pause video playback to conserve resources
-      if (video && !video.paused) {
-        video._wasPlaying = true;
-        video.pause();
-      }
-      
-      // Force a GPU resource cleanup when app is in background
-      const renderer = AFRAME.scenes[0].renderer;
-      
-      // Release some GPU resources temporarily
-      try {
-        renderer.forceContextLoss();
-        console.log("Forced context loss to free GPU resources while in background");
-      } catch (e) {
-        console.log("Could not force context loss:", e);
-      }
+  
+  // Release audio resources explicitly
+  if (audio) {
+    audio.pause();
+    audio.src = '';
+    audio.load();
+  }
+  
+  // Force garbage collection of THREE.js objects if possible
+  if (window.AFRAME && AFRAME.scenes[0]) {
+    const scene = AFRAME.scenes[0];
+    if (scene.renderer) {
+      scene.renderer.dispose();
     }
-  } else if (!document.hidden) {
-    // Returning to foreground
-    setTimeout(() => {
-      if (window.AFRAME && AFRAME.scenes[0]) {
-        const scene = AFRAME.scenes[0];
-        
-        // Resume video if it was playing
-        if (video && video._wasPlaying) {
-          video._wasPlaying = false;
-          video.play().catch(e => console.log("Could not resume video:", e));
-        }
-        
-        if (scene.renderer && scene.renderer.forceContextRestore) {
-          try {
-            scene.renderer.forceContextRestore();
-            configureVideoForDevice(); // Re-apply optimization
-            console.log("Restored context after returning from background");
-          } catch (e) {
-            console.log("Could not restore context:", e);
-          }
-        }
-        
-        // Re-render scene
-        scene.renderer.render(scene.object3D, scene.camera);
-      }
-    }, 300);
   }
 });
 </script>
