@@ -6,6 +6,8 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>360° Audio‑Driven XR Player</title>
+<!-- Preload critical assets -->
+<link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js" as="script">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
 <style>
 html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;color:#fff}
@@ -284,8 +286,8 @@ html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:syste
     vr-mode-ui="enabled:false" 
     device-orientation-permission-ui="enabled:false" 
     loading-screen="enabled:false"
-    renderer="antialias: true; alpha: true; precision: high"
-    onload="this.renderer.setPixelRatio(window.devicePixelRatio);">
+    renderer="antialias: true; alpha: true; precision: medium"
+    onload="this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));">
     <a-assets>
       <video id="video360" crossorigin="anonymous" playsinline webkit-playsinline muted preload="auto">
         <source id="videoSource" type="video/mp4">
@@ -316,6 +318,69 @@ const thumbnail_src="https://placehold.co/1024x1024/1E1E1E/FFFFFF?text=Album+Art
 const chapterName="Look Tin Eli",chapterOrder=2,tourName="Chinatown Tour";
 const isXR=true,isTeaser=false,outroCTA_time=20,outroCTA_backlink="https://example.com/full-tour";
 const devToggleAllowed=true,isMobile=matchMedia('(pointer:coarse)').matches;
+
+// Performance optimization settings
+const PERFORMANCE = {
+  // Lower is better for performance, higher for quality
+  textureQuality: isMobile ? 0.5 : 1.0,
+  maxFPS: isMobile ? 30 : 60,
+  useProgressiveLoading: true,
+  // Controls how aggressively we downscale video
+  videoScale: isMobile ? 0.6 : 1.0,
+  // How much to reduce pixel ratio on mobile
+  pixelRatioScale: isMobile ? 0.7 : 1.0
+};
+
+// Configure video quality for mobile devices
+const configureVideoForDevice = () => {
+  if (isMobile) {
+    // Reduce video element size for mobile to improve performance
+    const video = document.getElementById('video360');
+    if (video) {
+      // Set maximum dimensions for mobile to help with performance
+      video.style.maxWidth = `${Math.round(1280 * PERFORMANCE.videoScale)}px`;
+      video.style.maxHeight = `${Math.round(720 * PERFORMANCE.videoScale)}px`;
+      
+      // For mobile, we can also set lower resolution on the video element directly
+      // This forces a lower internal resolution in memory
+      video.width = Math.round(1280 * PERFORMANCE.videoScale);
+      video.height = Math.round(720 * PERFORMANCE.videoScale);
+    }
+    
+    // Apply texture quality settings (reduces GPU memory usage and improves performance)
+    if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+      const renderer = AFRAME.scenes[0].renderer;
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio * PERFORMANCE.pixelRatioScale, 1.5));
+    }
+  }
+};
+
+// FPS limiting for better battery life and consistent performance
+const setupFPSLimiting = () => {
+  if (!isMobile) return; // Only apply FPS limiting on mobile
+  
+  const targetFPS = PERFORMANCE.maxFPS;
+  const frameTime = 1000 / targetFPS;
+  let lastFrameTime = 0;
+  
+  // Monkey-patch requestAnimationFrame to limit FPS on mobile
+  const originalRAF = window.requestAnimationFrame;
+  window.requestAnimationFrame = (callback) => {
+    return originalRAF((timestamp) => {
+      const currentTime = performance.now();
+      const elapsed = currentTime - lastFrameTime;
+      
+      if (elapsed >= frameTime) {
+        lastFrameTime = currentTime - (elapsed % frameTime);
+        callback(timestamp);
+      } else {
+        // Skip this frame to maintain target FPS
+        originalRAF((t) => callback(t));
+      }
+    });
+  };
+};
+
 window.addEventListener('DOMContentLoaded',()=>{
  const $=id=>document.getElementById(id);
  const audio=$('audioPlayer'),video=$('video360'),vs=$('videoSource');
@@ -429,6 +494,27 @@ window.addEventListener('DOMContentLoaded',()=>{
    
    if(window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
      console.log("Forcing A-Frame render");
+     
+     // Apply performance settings
+     const renderer = AFRAME.scenes[0].renderer;
+     
+     // Apply texture quality settings
+     if (isMobile) {
+       // Lower texture maximum size for mobile (reduces VRAM usage)
+       renderer.capabilities.maxTextureSize = 2048;
+       
+       // Optional - set power preference to high-performance on mobile
+       // Note: this may increase battery usage
+       if (renderer.getContext().canvas.getContext) {
+         // This is not always supported
+         try {
+           renderer.getContext().canvas.getContext('webgl2', { powerPreference: 'high-performance' });
+         } catch (e) {
+           console.log("Power preference setting not supported");
+         }
+       }
+     }
+     
      AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
      window.dispatchEvent(new Event('resize'));
      
@@ -438,8 +524,8 @@ window.addEventListener('DOMContentLoaded',()=>{
        console.log("Ensuring videosphere visibility");
      }
      
-     // Schedule multiple renders with increasing delays
-     const renderDelays = [100, 400, 800, 1500]; 
+     // Schedule multiple renders with increasing delays - use fewer renders on mobile
+     const renderDelays = isMobile ? [100, 800] : [100, 400, 800, 1500]; 
      let lastDelay = Math.max(...renderDelays);
      
      renderDelays.forEach(delay => {
@@ -453,8 +539,20 @@ window.addEventListener('DOMContentLoaded',()=>{
              videosphere.setAttribute('visible', 'true');
            }
            
-           // Only hide spinner after the last render attempt
+           // Only hide spinner after the last render attempt or after 3 seconds have passed
+           // This helps prevent the spinner from being stuck on mobile
            if (delay === lastDelay) {
+             // Force hide spinner after a reasonable time
+             if (isMobile) {
+               // For mobile, we'll add additional forced spinner removal
+               setTimeout(() => {
+                 if (spinnerActive) {
+                   console.log("Force hiding spinner after timeout");
+                   spinner.style.display = 'none';
+                   spinnerActive = false;
+                 }
+               }, 5000);
+             }
              hideSpinner();
            }
          }
@@ -513,6 +611,66 @@ window.addEventListener('DOMContentLoaded',()=>{
      video.muted = true;
      video.play().catch(e => console.log("Auto-play attempt after load:", e));
    }
+ });
+ 
+ // Add a stalled/error event handler to recover from video loading issues
+ video.addEventListener('stalled', () => {
+   console.log("Video stalled - attempting recovery");
+   if (videoReady && xrMode) {
+     // Try to recover by reloading video source
+     setTimeout(() => {
+       video.load();
+       video.play().catch(e => console.log("Stalled recovery attempt:", e));
+     }, 1000);
+   }
+ });
+ 
+ // Add an explicit video error recovery mechanism
+ video.addEventListener('error', (e) => {
+   console.error('Video error:', video.error, e);
+   
+   // Only show alert in development mode
+   if (devToggleAllowed) {
+     alert('Video error: ' + (video.error ? video.error.message : 'unknown'));
+   }
+   
+   // Force hide spinner after video error
+   hideSpinner();
+   
+   // For mobile, try a more aggressive reload approach
+   if (isMobile) {
+     setTimeout(() => {
+       // Reset video source and try again
+       video.pause();
+       const vs = document.getElementById('videoSource');
+       if (vs) {
+         const currentSrc = vs.src;
+         vs.src = "";
+         setTimeout(() => {
+           vs.src = currentSrc;
+           video.load();
+           // Don't auto-play after error, let user initiate
+         }, 500);
+       }
+     }, 1000);
+   }
+ });
+ 
+ // Force hide spinner after a maximum time (failsafe)
+ setTimeout(() => {
+   if (spinnerActive) {
+     console.log("Force hiding spinner after maximum allowed time");
+     spinner.style.display = 'none';
+     spinnerActive = false;
+   }
+ }, 10000);
+
+ // Audio load error handling
+ audio.addEventListener('error', (e) => {
+   console.error('Audio error:', audio.error, e);
+   
+   // Force hide spinner after audio error
+   hideSpinner();
  });
  
  audio.addEventListener('canplay',()=>{
@@ -770,6 +928,12 @@ window.addEventListener('DOMContentLoaded',()=>{
    
    landing.style.display='none';
    
+   // Setup FPS limiting for consistent performance
+   setupFPSLimiting();
+   
+   // Configure video quality based on device capabilities
+   configureVideoForDevice();
+   
    // For mobile, try to play muted video first to help with autoplay restrictions
    if(isMobile && xrMode && videoReady) {
      video.muted = true;
@@ -792,7 +956,7 @@ window.addEventListener('DOMContentLoaded',()=>{
        window.dispatchEvent(new Event('resize'));
        
        // Additional explicit rendering calls with increasing delays
-       const renderAttempts = [100, 300, 800, 1500];
+       const renderAttempts = isMobile ? [100, 500] : [100, 300, 800, 1500];
        renderAttempts.forEach(delay => {
          setTimeout(() => {
            if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
@@ -846,6 +1010,73 @@ document.addEventListener('aframeinitialized', function() {
   if(videosphere) {
     videosphere.setAttribute('visible', 'true');
     console.log("Set videosphere visible on A-Frame init");
+    
+    // Add explicit texture optimization for the videosphere
+    if (isMobile) {
+      // Set texture filtering to improve performance
+      try {
+        const material = videosphere.getObject3D('mesh').material;
+        if (material && material.map) {
+          material.map.minFilter = THREE.LinearFilter;
+          material.map.generateMipmaps = false;
+          material.needsUpdate = true;
+          console.log("Applied texture optimizations to videosphere");
+        }
+      } catch (e) {
+        console.log("Could not apply texture optimizations:", e);
+      }
+    }
+  }
+
+  // Add dynamic THREE.js settings for better performance
+  if (window.THREE) {
+    // Disable preserveDrawingBuffer for better performance
+    THREE.WebGLRenderer.prototype.preserveDrawingBuffer = false;
+  }
+  
+  // Configure for mobile performance
+  if (isMobile && window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+    console.log("Optimizing A-Frame for mobile");
+    
+    // Reduce render quality for mobile
+    const renderer = AFRAME.scenes[0].renderer;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio * PERFORMANCE.pixelRatioScale, 1.5));
+    
+    // Optimize renderer settings
+    renderer.shadowMap.enabled = false;
+    renderer.shadowMap.autoUpdate = false;
+    renderer.physicallyCorrectLights = false;
+    
+    // Optional: Could disable antialiasing for better performance
+    // renderer.antialias = false;
+    
+    // Apply further optimizations 
+    if (window.THREE && THREE.ShaderChunk) {
+      // Get the current scene to optimize
+      const scene = AFRAME.scenes[0].object3D;
+      
+      // Traverse the scene to optimize geometries and materials
+      scene.traverse(function(node) {
+        if (node.isMesh) {
+          // Disable frustum culling for videosphere (it's always visible)
+          if (node.parent && node.parent.type === 'VideosphereComponent') {
+            node.frustumCulled = false;
+          } else {
+            node.frustumCulled = true;
+          }
+          
+          // Disable shadows
+          node.castShadow = false;
+          node.receiveShadow = false;
+          
+          // Simplify materials
+          if (node.material) {
+            node.material.fog = false;
+            node.material.lights = false;
+          }
+        }
+      });
+    }
   }
   
   // Force another render after A-Frame is fully initialized
@@ -857,6 +1088,15 @@ document.addEventListener('aframeinitialized', function() {
       window.dispatchEvent(new Event('resize'));
     }
   }, 500);
+  
+  // One final attempt to hide spinner
+  setTimeout(() => {
+    if (spinnerActive) {
+      console.log("Final attempt to hide spinner after A-Frame init");
+      spinner.style.display = 'none';
+      spinnerActive = false;
+    }
+  }, 3000);
 });
 
 // Add video playback rate matching to ensure smoother playback
@@ -889,6 +1129,38 @@ document.addEventListener('visibilitychange', () => {
         videosphere.setAttribute('visible', 'true');
       }, 300);
     }
+  }
+});
+
+// Add some memory management
+window.addEventListener('visibilitychange', () => {
+  // When app goes to background on mobile, reduce memory usage
+  if (document.hidden && isMobile) {
+    if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+      // Force a GPU resource cleanup when app is in background
+      const renderer = AFRAME.scenes[0].renderer;
+      
+      // Release some GPU resources temporarily
+      renderer.forceContextLoss();
+      console.log("Forced context loss to free GPU resources while in background");
+      
+      // We'll recreate context when returning to foreground
+    }
+  } else if (!document.hidden) {
+    // Returning to foreground
+    setTimeout(() => {
+      if (window.AFRAME && AFRAME.scenes[0]) {
+        const scene = AFRAME.scenes[0];
+        if (scene.renderer && scene.renderer.forceContextRestore) {
+          scene.renderer.forceContextRestore();
+          configureVideoForDevice(); // Re-apply optimization
+          console.log("Restored context after returning from background");
+        }
+        
+        // Re-render scene
+        scene.renderer.render(scene.object3D, scene.camera);
+      }
+    }, 300);
   }
 });
 </script>
