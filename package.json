@@ -1,0 +1,19 @@
+{
+  "name": "360-audio-driven-xr-player",
+  "version": "1.0.0",
+  "description": "Web-based player for immersive 360° video experiences with synchronized audio",
+  "main": "index.html",
+  "scripts": {
+    "start": "npx http-server -c-1 -o",
+    "dev": "npx http-server -c-1 -o"
+  },
+  "keywords": [
+    "360",
+    "video",
+    "audio",
+    "xr",
+    "a-frame"
+  ],
+  "author": "",
+  "license": "MIT"
+} 
