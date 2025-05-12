@@ -323,7 +323,6 @@ const devToggleAllowed=true,isMobile=matchMedia('(pointer:coarse)').matches;
 const PERFORMANCE = {
   // Lower is better for performance, higher for quality
   textureQuality: isMobile ? 0.5 : 1.0,
-  maxFPS: isMobile ? 30 : 60,
   useProgressiveLoading: true,
   // Controls how aggressively we downscale video
   videoScale: isMobile ? 0.6 : 1.0,
@@ -345,6 +344,12 @@ const configureVideoForDevice = () => {
       // This forces a lower internal resolution in memory
       video.width = Math.round(1280 * PERFORMANCE.videoScale);
       video.height = Math.round(720 * PERFORMANCE.videoScale);
+      
+      // Disable hardware acceleration if it's causing problems
+      // This can sometimes resolve texture loading issues on certain devices
+      // Uncomment if needed:
+      // video.style.webkitTransform = 'translateZ(0)';
+      // video.style.transform = 'translateZ(0)';
     }
     
     // Apply texture quality settings (reduces GPU memory usage and improves performance)
@@ -353,32 +358,6 @@ const configureVideoForDevice = () => {
       renderer.setPixelRatio(Math.min(window.devicePixelRatio * PERFORMANCE.pixelRatioScale, 1.5));
     }
   }
-};
-
-// FPS limiting for better battery life and consistent performance
-const setupFPSLimiting = () => {
-  if (!isMobile) return; // Only apply FPS limiting on mobile
-  
-  const targetFPS = PERFORMANCE.maxFPS;
-  const frameTime = 1000 / targetFPS;
-  let lastFrameTime = 0;
-  
-  // Monkey-patch requestAnimationFrame to limit FPS on mobile
-  const originalRAF = window.requestAnimationFrame;
-  window.requestAnimationFrame = (callback) => {
-    return originalRAF((timestamp) => {
-      const currentTime = performance.now();
-      const elapsed = currentTime - lastFrameTime;
-      
-      if (elapsed >= frameTime) {
-        lastFrameTime = currentTime - (elapsed % frameTime);
-        callback(timestamp);
-      } else {
-        // Skip this frame to maintain target FPS
-        originalRAF((t) => callback(t));
-      }
-    });
-  };
 };
 
 window.addEventListener('DOMContentLoaded',()=>{
@@ -503,17 +482,24 @@ window.addEventListener('DOMContentLoaded',()=>{
        // Lower texture maximum size for mobile (reduces VRAM usage)
        renderer.capabilities.maxTextureSize = 2048;
        
-       // Optional - set power preference to high-performance on mobile
-       // Note: this may increase battery usage
+       // On mobile, force power preference to high-performance
+       // But make it optional to avoid crashes on unsupported devices
        if (renderer.getContext().canvas.getContext) {
-         // This is not always supported
          try {
            renderer.getContext().canvas.getContext('webgl2', { powerPreference: 'high-performance' });
          } catch (e) {
            console.log("Power preference setting not supported");
          }
        }
+       
+       // Tell the renderer to prioritize performance over quality
+       if (renderer.debug) {
+         renderer.debug.checkShaderErrors = false;
+       }
      }
+     
+     // Force composite
+     renderer.autoClear = true;
      
      AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
      window.dispatchEvent(new Event('resize'));
@@ -587,6 +573,13 @@ window.addEventListener('DOMContentLoaded',()=>{
  // Video loading events
  video.addEventListener('loadedmetadata', () => {
    console.log("Video metadata loaded");
+   
+   // For mobile, apply some optimizations immediately after metadata loads
+   if (isMobile) {
+     // Lower video quality via video element properties
+     video.width = Math.round(1280 * PERFORMANCE.videoScale);
+     video.height = Math.round(720 * PERFORMANCE.videoScale);
+   }
  });
  
  video.addEventListener('loadeddata',()=>{
@@ -601,6 +594,23 @@ window.addEventListener('DOMContentLoaded',()=>{
      // Ensure videosphere is visible after video loads
      if(videosphere) {
        videosphere.setAttribute('visible', 'true');
+       
+       // For mobile, optimize the videosphere material immediately
+       if (isMobile) {
+         try {
+           // Get the videosphere mesh
+           const material = videosphere.getObject3D('mesh')?.material;
+           if (material && material.map) {
+             // Apply optimizations to the video texture
+             material.map.minFilter = THREE.LinearFilter;
+             material.map.generateMipmaps = false;
+             material.needsUpdate = true;
+             console.log("Applied early texture optimizations to videosphere");
+           }
+         } catch (e) {
+           console.log("Could not apply early texture optimizations:", e);
+         }
+       }
      }
    }
    
@@ -696,8 +706,19 @@ window.addEventListener('DOMContentLoaded',()=>{
  };
  
  audio.addEventListener('timeupdate',()=>{
-   if(xrMode && videoReady && Math.abs(video.currentTime-audio.currentTime)>0.1) {
-     video.currentTime=audio.currentTime;
+   // On mobile, sync less frequently to prevent performance issues
+   if (isMobile) {
+     // Only sync every few seconds and only if difference is significant
+     if (xrMode && videoReady && 
+         (audio.currentTime % 4 < 0.1) && // Only check roughly every 4 seconds
+         Math.abs(video.currentTime - audio.currentTime) > 0.5) {
+       video.currentTime = audio.currentTime;
+     }
+   } else {
+     // Desktop can handle more frequent syncing
+     if(xrMode && videoReady && Math.abs(video.currentTime-audio.currentTime) > 0.1) {
+       video.currentTime = audio.currentTime;
+     }
    }
    
    if(teaser&&!overlayShown&&audio.currentTime>=outroCTA_time){
@@ -709,7 +730,20 @@ window.addEventListener('DOMContentLoaded',()=>{
  // Add seeking event to keep video in sync when user scrubs audio
  audio.addEventListener('seeking', () => {
    if (xrMode && videoReady) {
-     video.currentTime = audio.currentTime;
+     // Show spinner
+     showSpinner();
+     
+     // For mobile, don't sync immediately as it can cause stuttering
+     if (!isMobile) {
+       video.currentTime = audio.currentTime;
+     } else {
+       // For mobile, set a timeout before syncing to reduce impact
+       setTimeout(() => {
+         if (xrMode && videoReady) {
+           video.currentTime = audio.currentTime;
+         }
+       }, 200);
+     }
    }
  });
  
@@ -718,14 +752,29 @@ window.addEventListener('DOMContentLoaded',()=>{
      // Ensure video and audio are synchronized after seeking finishes
      video.currentTime = audio.currentTime;
      
+     // On mobile, give a moment before hiding spinner
+     if (isMobile) {
+       setTimeout(hideSpinner, 300);
+     }
+     
      // Ensure appropriate playback state
      if (!audio.paused && video.paused) {
-       video.play().catch(e => {
-         console.error("Video play after seek error:", e);
-         // Try with muted as fallback
-         video.muted = true;
-         video.play().catch(e => console.error("Muted play after seek failed:", e));
-       });
+       // For mobile, add a small delay before playing to ensure texture loads
+       if (isMobile) {
+         setTimeout(() => {
+           video.play().catch(e => {
+             console.error("Video play after seek error:", e);
+             video.muted = true;
+             video.play().catch(e => console.error("Muted play after seek failed:", e));
+           });
+         }, 200);
+       } else {
+         video.play().catch(e => {
+           console.error("Video play after seek error:", e);
+           video.muted = true;
+           video.play().catch(e => console.error("Muted play after seek failed:", e));
+         });
+       }
      }
    }
  });
@@ -735,9 +784,13 @@ window.addEventListener('DOMContentLoaded',()=>{
    let lastSyncTime = 0;
    return () => {
      const now = Date.now();
-     // Only sync if more than 300ms have passed since last sync
-     if (now - lastSyncTime > 300 && xrMode && videoReady && !video.paused && !audio.paused) {
-       if (Math.abs(video.currentTime - audio.currentTime) > 0.2) {
+     // Reduce sync frequency on mobile to prevent performance issues
+     // Only sync if more than 700ms have passed since last sync on mobile (was 300ms)
+     const syncInterval = isMobile ? 700 : 300;
+     if (now - lastSyncTime > syncInterval && xrMode && videoReady && !video.paused && !audio.paused) {
+       // Increase the threshold for sync to prevent constant adjustments
+       const syncThreshold = isMobile ? 0.5 : 0.2;
+       if (Math.abs(video.currentTime - audio.currentTime) > syncThreshold) {
          video.currentTime = audio.currentTime;
          lastSyncTime = now;
        }
@@ -745,8 +798,8 @@ window.addEventListener('DOMContentLoaded',()=>{
    };
  })();
  
- // Add a periodic sync check to catch drift
- const syncInterval = setInterval(syncVideoToAudio, 2000);
+ // Add a periodic sync check to catch drift - less frequent on mobile
+ const syncInterval = setInterval(syncVideoToAudio, isMobile ? 4000 : 2000);
  
  // Cleanup interval on page unload
  window.addEventListener('beforeunload', () => {
@@ -928,9 +981,6 @@ window.addEventListener('DOMContentLoaded',()=>{
    
    landing.style.display='none';
    
-   // Setup FPS limiting for consistent performance
-   setupFPSLimiting();
-   
    // Configure video quality based on device capabilities
    configureVideoForDevice();
    
@@ -1017,14 +1067,42 @@ document.addEventListener('aframeinitialized', function() {
       try {
         const material = videosphere.getObject3D('mesh').material;
         if (material && material.map) {
+          // Use a more aggressive optimization approach
           material.map.minFilter = THREE.LinearFilter;
+          material.map.magFilter = THREE.LinearFilter; // Also optimize magnification filter
           material.map.generateMipmaps = false;
+          material.map.format = THREE.RGBFormat; // Use RGB instead of RGBA if alpha isn't needed
+          material.map.needsUpdate = true;
+          
+          // Optional: force texture to power-of-two dimensions for better performance
+          // material.map.image.width = nearestPowerOfTwo(material.map.image.width);
+          // material.map.image.height = nearestPowerOfTwo(material.map.image.height);
+          
           material.needsUpdate = true;
           console.log("Applied texture optimizations to videosphere");
         }
       } catch (e) {
         console.log("Could not apply texture optimizations:", e);
       }
+    }
+  }
+
+  // Add a direct optimization for the video texture update mechanism
+  if (isMobile && window.THREE) {
+    try {
+      // Try to optimize how video textures update
+      THREE.VideoTexture.prototype.update = function() {
+        const video = this.image;
+        if (video.readyState >= video.HAVE_CURRENT_DATA) {
+          // Check if video is actually playing before updating texture
+          if (!video.paused && video.currentTime > 0) {
+            this.needsUpdate = true;
+          }
+        }
+      };
+      console.log("Optimized video texture update mechanism");
+    } catch (e) {
+      console.log("Could not optimize video texture updates:", e);
     }
   }
 
@@ -1099,14 +1177,6 @@ document.addEventListener('aframeinitialized', function() {
   }, 3000);
 });
 
-// Add video playback rate matching to ensure smoother playback
-video.addEventListener('ratechange', () => {
-  // If audio changes speed, match video speed
-  if (xrMode && videoReady && video.playbackRate !== audio.playbackRate) {
-    video.playbackRate = audio.playbackRate;
-  }
-});
-
 // Add more robust visibility change handling
 document.addEventListener('visibilitychange', () => {
   if(!document.hidden) {
@@ -1137,24 +1207,43 @@ window.addEventListener('visibilitychange', () => {
   // When app goes to background on mobile, reduce memory usage
   if (document.hidden && isMobile) {
     if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+      // Pause video playback to conserve resources
+      if (video && !video.paused) {
+        video._wasPlaying = true;
+        video.pause();
+      }
+      
       // Force a GPU resource cleanup when app is in background
       const renderer = AFRAME.scenes[0].renderer;
       
       // Release some GPU resources temporarily
-      renderer.forceContextLoss();
-      console.log("Forced context loss to free GPU resources while in background");
-      
-      // We'll recreate context when returning to foreground
+      try {
+        renderer.forceContextLoss();
+        console.log("Forced context loss to free GPU resources while in background");
+      } catch (e) {
+        console.log("Could not force context loss:", e);
+      }
     }
   } else if (!document.hidden) {
     // Returning to foreground
     setTimeout(() => {
       if (window.AFRAME && AFRAME.scenes[0]) {
         const scene = AFRAME.scenes[0];
+        
+        // Resume video if it was playing
+        if (video && video._wasPlaying) {
+          video._wasPlaying = false;
+          video.play().catch(e => console.log("Could not resume video:", e));
+        }
+        
         if (scene.renderer && scene.renderer.forceContextRestore) {
-          scene.renderer.forceContextRestore();
-          configureVideoForDevice(); // Re-apply optimization
-          console.log("Restored context after returning from background");
+          try {
+            scene.renderer.forceContextRestore();
+            configureVideoForDevice(); // Re-apply optimization
+            console.log("Restored context after returning from background");
+          } catch (e) {
+            console.log("Could not restore context:", e);
+          }
         }
         
         // Re-render scene
