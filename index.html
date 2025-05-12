@@ -327,7 +327,9 @@ const PERFORMANCE = {
   // Controls how aggressively we downscale video
   videoScale: isMobile ? 0.6 : 1.0,
   // How much to reduce pixel ratio on mobile
-  pixelRatioScale: isMobile ? 0.7 : 1.0
+  pixelRatioScale: isMobile ? 0.7 : 1.0,
+  // Buffer size for mobile (in seconds)
+  mobileBufferSize: 30
 };
 
 // Configure video quality for mobile devices
@@ -344,6 +346,22 @@ const configureVideoForDevice = () => {
       // This forces a lower internal resolution in memory
       video.width = Math.round(1280 * PERFORMANCE.videoScale);
       video.height = Math.round(720 * PERFORMANCE.videoScale);
+      
+      // Adjust buffering strategy - this is key for mobile performance
+      // Tell the browser how much to buffer (default is often too much for mobile memory)
+      try {
+        // Most browsers support this, but wrap in try/catch for safety
+        video.preload = "auto"; // Ensure preloading is enabled
+        
+        // Specify buffer size (not all browsers support this)
+        if ('buffered' in video) {
+          // Try to set a smaller buffer size to prevent memory issues
+          // This is a custom attribute that may not be respected by all browsers
+          video.bufferSize = PERFORMANCE.mobileBufferSize;
+        }
+      } catch (e) {
+        console.log("Could not set buffer parameters:", e);
+      }
       
       // Disable hardware acceleration if it's causing problems
       // This can sometimes resolve texture loading issues on certain devices
@@ -623,15 +641,229 @@ window.addEventListener('DOMContentLoaded',()=>{
    }
  });
  
+ // Set up buffer monitoring and recovery for mobile
+ let lastBufferCheck = 0;
+ let bufferWarnings = 0;
+ const MAX_BUFFER_WARNINGS = 3;
+ let isRecoveringBuffer = false;
+ 
+ // Monitor buffer status and attempt recovery if needed
+ const monitorVideoBuffer = () => {
+   if (!isMobile || !videoReady || !xrMode) return;
+   
+   const now = Date.now();
+   if (now - lastBufferCheck < 5000) return; // Check every 5 seconds
+   lastBufferCheck = now;
+   
+   if (video.paused) return; // Don't check if paused
+   
+   try {
+     // Get current buffer state
+     const buffered = video.buffered;
+     let isBufferHealthy = false;
+     
+     if (buffered.length > 0) {
+       // Check if we have enough buffer ahead
+       const currentTime = video.currentTime;
+       const bufferedEnd = buffered.end(buffered.length - 1);
+       const bufferedAhead = bufferedEnd - currentTime;
+       
+       console.log(`Buffer status: ${bufferedAhead.toFixed(2)}s ahead of current playback`);
+       
+       // Consider buffer healthy if we have at least 10 seconds ahead
+       isBufferHealthy = bufferedAhead >= 10;
+     }
+     
+     if (!isBufferHealthy && !isRecoveringBuffer) {
+       bufferWarnings++;
+       console.log(`Buffer warning ${bufferWarnings}/${MAX_BUFFER_WARNINGS}`);
+       
+       if (bufferWarnings >= MAX_BUFFER_WARNINGS) {
+         console.log("Buffer critically low, attempting recovery");
+         attemptBufferRecovery();
+       }
+     } else if (isBufferHealthy) {
+       // Reset warning count if buffer is healthy
+       bufferWarnings = 0;
+     }
+   } catch (e) {
+     console.log("Error checking buffer:", e);
+   }
+ };
+ 
+ // Attempt to recover from buffer issues
+ const attemptBufferRecovery = () => {
+   if (isRecoveringBuffer) return;
+   isRecoveringBuffer = true;
+   
+   // Show spinner during recovery
+   showSpinner();
+   
+   console.log("Starting buffer recovery process");
+   
+   // Store current time and play state
+   const currentTime = video.currentTime;
+   const wasPlaying = !video.paused;
+   
+   // Pause video to allow buffer to fill
+   if (!video.paused) {
+     video.pause();
+   }
+   
+   // For more serious recovery, reload the video source
+   setTimeout(() => {
+     // Load without autoplay
+     video.load();
+     
+     // Watch for data loading
+     const checkLoaded = () => {
+       // Check if enough data is loaded (at least to current position plus 5s)
+       try {
+         if (video.readyState >= 3) { // HAVE_FUTURE_DATA
+           const buffered = video.buffered;
+           let hasEnoughBuffer = false;
+           
+           for (let i = 0; i < buffered.length; i++) {
+             if (buffered.start(i) <= currentTime && buffered.end(i) >= currentTime + 5) {
+               hasEnoughBuffer = true;
+               break;
+             }
+           }
+           
+           if (hasEnoughBuffer) {
+             finishRecovery();
+             return;
+           }
+         }
+         
+         // Check again in 1 second if not ready
+         setTimeout(checkLoaded, 1000);
+       } catch (e) {
+         console.log("Error in buffer check:", e);
+         finishRecovery(); // Proceed anyway after error
+       }
+     };
+     
+     // Start checking loading progress
+     checkLoaded();
+     
+     // Force recovery to complete after maximum wait time
+     setTimeout(() => {
+       if (isRecoveringBuffer) {
+         console.log("Forcing recovery completion after timeout");
+         finishRecovery();
+       }
+     }, 10000);
+   }, 500);
+   
+   // Final step of recovery
+   const finishRecovery = () => {
+     if (!isRecoveringBuffer) return;
+     
+     console.log("Finishing buffer recovery");
+     
+     // Seek to the stored position
+     try {
+       video.currentTime = currentTime;
+     } catch (e) {
+       console.log("Seek error in recovery:", e);
+     }
+     
+     // Apply texture optimizations again
+     if (videosphere) {
+       try {
+         const material = videosphere.getObject3D('mesh')?.material;
+         if (material && material.map) {
+           material.map.minFilter = THREE.LinearFilter;
+           material.map.magFilter = THREE.LinearFilter;
+           material.map.generateMipmaps = false;
+           material.needsUpdate = true;
+         }
+       } catch (e) {
+         console.log("Error reapplying texture optimizations:", e);
+       }
+     }
+     
+     // Resume if it was playing
+     if (wasPlaying) {
+       video.play().catch(e => console.log("Play error in recovery:", e));
+     }
+     
+     // Hide spinner and reset state
+     hideSpinner();
+     isRecoveringBuffer = false;
+     bufferWarnings = 0;
+   };
+ };
+ 
+ // Set up regular buffer monitoring
+ const bufferMonitorInterval = setInterval(monitorVideoBuffer, 5000);
+ 
+ // Cleanup interval on page unload
+ window.addEventListener('beforeunload', () => {
+   clearInterval(bufferMonitorInterval);
+ });
+
  // Add a stalled/error event handler to recover from video loading issues
  video.addEventListener('stalled', () => {
    console.log("Video stalled - attempting recovery");
    if (videoReady && xrMode) {
      // Try to recover by reloading video source
      setTimeout(() => {
-       video.load();
-       video.play().catch(e => console.log("Stalled recovery attempt:", e));
+       // On mobile, increment our buffer warning count
+       if (isMobile) {
+         bufferWarnings++;
+         if (bufferWarnings >= MAX_BUFFER_WARNINGS) {
+           attemptBufferRecovery();
+         }
+       } else {
+         // On desktop just reload
+         video.load();
+         video.play().catch(e => console.log("Stalled recovery attempt:", e));
+       }
      }, 1000);
+   }
+ });
+
+ // Add specific handling for cases where video decoding is interrupted
+ video.addEventListener('waiting', () => {
+   console.log("Video waiting for data");
+   showSpinner();
+   
+   // On mobile, this could indicate buffer or memory issues
+   if (isMobile) {
+     bufferWarnings++;
+     
+     // If we've hit waiting state multiple times, try recovery
+     if (bufferWarnings >= MAX_BUFFER_WARNINGS && !isRecoveringBuffer) {
+       console.log("Multiple wait states detected, attempting buffer recovery");
+       attemptBufferRecovery();
+     }
+   }
+ });
+ 
+ // Add specific event listener for progress to monitor buffer state
+ video.addEventListener('progress', () => {
+   if (!isMobile) return;
+   
+   try {
+     const buffered = video.buffered;
+     if (buffered.length > 0) {
+       const bufferedEnd = buffered.end(buffered.length - 1);
+       const duration = video.duration || 1;
+       const bufferedAmount = (bufferedEnd / duration) * 100;
+       
+       // Log buffer percentage for debugging
+       console.log(`Buffer progress: ${bufferedAmount.toFixed(1)}% of video buffered`);
+       
+       // If we've buffered a significant amount, reset warnings
+       if (bufferedAmount > 30 && bufferWarnings > 0) {
+         console.log("Buffer progress good, resetting warnings");
+         bufferWarnings = 0;
+       }
+     }
+   } catch (e) {
+     console.log("Error checking buffer progress:", e);
    }
  });
  
@@ -674,8 +906,7 @@ window.addEventListener('DOMContentLoaded',()=>{
      spinnerActive = false;
    }
  }, 10000);
-
- // Audio load error handling
+ 
  audio.addEventListener('error', (e) => {
    console.error('Audio error:', audio.error, e);
    
