@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>360° Audio‑Driven XR Player</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;color:#fff}#xrContainer{position:absolute;inset:0}#landingOverlay{position:fixed;inset:0;z-index:700;background:#000;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px;text-align:center;gap:20px}#beginBtn{background:#fff;color:#000;border:none;border-radius:30px;padding:18px 36px;font-size:18px;font-weight:600;cursor:pointer;width:calc(100% - 40px);max-width:320px}#audioOnly{position:absolute;top:0;left:0;right:0;display:none;flex-direction:column;align-items:center;padding-top:20px;gap:20px}.artwork-wrapper{position:relative;width:calc(100% - 40px);max-width:400px}.artwork{width:100%;aspect-ratio:1/1;border-radius:16px;object-fit:cover;box-shadow:0 4px 12px rgba(0,0,0,.4)}#toggleModeButton{position:absolute;bottom:10px;right:10px;border:none;border-radius:20px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:opacity .15s}#toggleModeButton.disabled{pointer-events:none;opacity:.5}.status-dot{width:10px;height:10px;border-radius:50%;background:orange;display:inline-block}#trackInfo{position:fixed;bottom:140px;left:50%;transform:translateX(-50%);max-width:calc(100% - 40px);text-align:center;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:180}#audioPlayer{position:fixed;bottom:80px;left:0;right:0;margin:0 auto;width:calc(100% - 20px);max-width:600px;z-index:200;background:#111;border-radius:6px;padding:2px 0}.chapter-nav{position:fixed;bottom:10px;left:0;right:0;margin:0 auto;width:calc(100% - 20px);max-width:600px;display:flex;gap:10px;z-index:190}.nav-btn{flex:1;background:#222;border:none;border-radius:8px;padding:12px 0;font-size:20px;color:#fff;cursor:pointer}.top-bar{position:fixed;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:12px;z-index:150}.ui-btn{background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:20px;padding:8px 16px;font-size:14px;cursor:pointer}#ctaOverlay{position:fixed;inset:0;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;z-index:500;cursor:pointer}.cta-box{display:flex;flex-direction:column;align-items:center;gap:20px}.cta-logo{width:120px;height:120px;background:#fff;border-radius:50%}#loadingSpinner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:450;pointer-events:none}.spinner{width:60px;height:60px;border:6px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}</style>
+</head>
+<body>
+<div id="landingOverlay"><h1>Welcome to the Chinatown Audio Tour</h1><p>Immerse yourself in history as you explore.</p><button id="beginBtn">Begin Tour</button></div>
+<div id="xrContainer">
+  <a-scene embedded 
+    vr-mode-ui="enabled:false" 
+    device-orientation-permission-ui="enabled:false" 
+    loading-screen="enabled:false"
+    renderer="antialias: true; alpha: true; precision: high"
+    onload="this.renderer.setPixelRatio(window.devicePixelRatio);">
+    <a-assets>
+      <video id="video360" crossorigin="anonymous" playsinline webkit-playsinline preload="auto">
+        <source id="videoSource" type="video/mp4">
+      </video>
+    </a-assets>
+    <a-videosphere id="videosphere" src="#video360" rotation="0 -90 0"></a-videosphere>
+    <a-entity id="cameraEntity" camera look-controls="reverseMouseDrag:true;touchEnabled:true" position="0 1.6 0"></a-entity>
+  </a-scene>
+</div>
+<div id="audioOnly"><div class="artwork-wrapper"><img id="artworkImg" class="artwork" alt=""><button id="toggleModeButton" class="disabled"><span class="status-dot"></span><span>XR Mode</span></button></div></div>
+<div id="trackInfo"></div>
+<div class="top-bar"><button id="recenterButton" class="ui-btn">Recenter</button><button id="devToggleButton" class="ui-btn">Toggle Teaser</button><button id="xrToggleModeButton" class="ui-btn">Audio Only</button></div>
+<div id="loadingSpinner"><div class="spinner"></div></div>
+<audio id="audioPlayer" controls crossorigin="anonymous"></audio>
+<div class="chapter-nav" id="chapterNav"><button id="prevChapter" class="nav-btn">&laquo;</button><button id="nextChapter" class="nav-btn">&raquo;</button></div>
+<div id="ctaOverlay"><div class="cta-box" id="ctaBox"><div class="cta-logo"></div><div class="cta-text">Take the full tour here</div></div></div>
+<script>
+const XR_src="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4";
+const audio_src="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.mp3";
+const thumbnail_src="https://placehold.co/1024x1024/1E1E1E/FFFFFF?text=Album+Art";
+const chapterName="Look Tin Eli",chapterOrder=2,tourName="Chinatown Tour";
+const isXR=true,isTeaser=false,outroCTA_time=20,outroCTA_backlink="https://example.com/full-tour";
+const devToggleAllowed=true,isMobile=matchMedia('(pointer:coarse)').matches;
+window.addEventListener('DOMContentLoaded',()=>{
+ const $=id=>document.getElementById(id);
+ const audio=$('audioPlayer'),video=$('video360'),vs=$('videoSource');
+ const art=$('artworkImg'),track=$('trackInfo'),camera=$('cameraEntity');
+ const recBtn=$('recenterButton'),modeBtn=$('toggleModeButton'),devBtn=$('devToggleButton');
+ const xrModeBtn=$('xrToggleModeButton');
+ const xrWrap=$('xrContainer'),audioOnly=$('audioOnly');
+ const landing=$('landingOverlay'),begin=$('beginBtn');
+ const spinner=$('loadingSpinner'),overlay=$('ctaOverlay'),ctaBox=$('ctaBox');
+ const chapterNav=$('chapterNav');
+ const videosphere=$('videosphere');
+ 
+ // Spinner control variables
+ let spinnerTimeout = null;
+ let spinnerActive = false;
+ 
+ // Control spinner with debounce
+ const showSpinner = () => {
+   if (spinnerTimeout) {
+     clearTimeout(spinnerTimeout);
+   }
+   if (!spinnerActive) {
+     spinner.style.display = 'flex';
+     spinnerActive = true;
+   }
+ };
+ 
+ const hideSpinner = () => {
+   if (spinnerTimeout) {
+     clearTimeout(spinnerTimeout);
+   }
+   // Add delay before hiding to prevent flashes
+   spinnerTimeout = setTimeout(() => {
+     spinner.style.display = 'none';
+     spinnerActive = false;
+   }, 300);
+ };
+ 
+ // Set video source
+ vs.src=XR_src;
+ video.load();
+ 
+ // Add error logging for debugging
+ video.addEventListener('error', (e) => {
+   console.error('Video error:', video.error, e);
+   alert('Video error: ' + (video.error ? video.error.message : 'unknown'));
+ });
+ 
+ audio.innerHTML=`<source src="${audio_src}" type="audio/mpeg">`;
+ art.src=thumbnail_src;
+ track.textContent=`Chapter ${chapterOrder} – ${chapterName} | ${tourName}`;
+ let teaser=isTeaser,xrAllowed=isXR||teaser,xrMode=false;
+ let videoReady=false,audioReady=false,overlayShown=false;
+ const dot=modeBtn.querySelector('.status-dot');
+ 
+ const updateXrButton=()=>{
+   const ready=videoReady&&audioReady;
+   modeBtn.classList.toggle('disabled',!ready);
+   modeBtn.disabled=!ready;
+   dot.style.background=ready?'limegreen':'orange';
+ };
+ 
+ const layout=()=>{
+   modeBtn.style.display=xrAllowed&&!teaser?'inline-flex':'none';
+   recBtn.style.display=xrMode?'inline-block':'none';
+   xrModeBtn.style.display=(xrMode&&xrAllowed&&!teaser)?'inline-block':'none';
+   chapterNav.style.display=teaser?'none':'flex';
+   xrWrap.style.display=(xrMode&&xrAllowed)?'block':'none';
+   audioOnly.style.display=(!xrMode||!xrAllowed)?'flex':'none';
+   modeBtn.lastChild.textContent=xrMode?' Audio Only':' XR Mode';
+   
+   // Ensure A-Frame scene refreshes when made visible
+   if(xrMode && xrAllowed) {
+     forceAFrameRender();
+   }
+ };
+ 
+ // Modify force render function to manage spinner state 
+ const forceAFrameRender = () => {
+   // Show spinner at the beginning of render attempts
+   showSpinner();
+   
+   if(window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+     console.log("Forcing A-Frame render");
+     AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+     window.dispatchEvent(new Event('resize'));
+     
+     // Schedule multiple renders with increasing delays
+     const renderDelays = [100, 400, 800, 1500]; 
+     let lastDelay = Math.max(...renderDelays);
+     
+     renderDelays.forEach(delay => {
+       setTimeout(() => {
+         if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+           console.log(`Scheduled render at ${delay}ms`);
+           AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+           
+           // Only hide spinner after the last render attempt
+           if (delay === lastDelay) {
+             hideSpinner();
+           }
+         }
+       }, delay);
+     });
+   } else {
+     // If A-Frame isn't ready, hide spinner after timeout
+     setTimeout(hideSpinner, 800);
+   }
+ };
+ 
+ // Setup observer to detect when container becomes visible
+ const containerObserver = new MutationObserver((mutations) => {
+   mutations.forEach((mutation) => {
+     if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
+       const target = mutation.target;
+       if (target.style.display === 'block' && target.id === 'xrContainer') {
+         console.log("XR container now visible - forcing render");
+         forceAFrameRender();
+       }
+     }
+   });
+ });
+ 
+ // Start observing the container for visibility changes
+ containerObserver.observe(xrWrap, { attributes: true });
+ 
+ if(teaser)xrMode=true;
+ layout();
+ updateXrButton();
+ 
+ // Video loading events
+ video.addEventListener('loadedmetadata', () => {
+   console.log("Video metadata loaded");
+ });
+ 
+ video.addEventListener('loadeddata',()=>{
+   console.log("Video data loaded");
+   videoReady=true;
+   updateXrButton();
+   
+   // Force renderer update
+   if(window.AFRAME && AFRAME.scenes[0]) {
+     AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+   }
+   
+   hideSpinner();
+ });
+ 
+ audio.addEventListener('canplay',()=>{
+   audioReady=true;
+   updateXrButton();
+ });
+ 
+ // Replace the existing event listeners with our debounced versions
+ video.addEventListener('waiting', showSpinner);
+ video.addEventListener('seeking', showSpinner);
+ video.addEventListener('playing', hideSpinner);
+ video.addEventListener('canplay', hideSpinner);
+ audio.addEventListener('seeking', showSpinner);
+ audio.addEventListener('canplay', hideSpinner);
+ 
+ const recenter=()=>{
+   camera.setAttribute('rotation','0 0 0');
+   const lc=camera.components['look-controls'];
+   if(lc?.pitchObject){
+     lc.pitchObject.rotation.x=0;
+     lc.yawObject.rotation.y=0;
+   }
+ };
+ 
+ audio.addEventListener('timeupdate',()=>{
+   if(xrMode && videoReady && Math.abs(video.currentTime-audio.currentTime)>0.1) {
+     video.currentTime=audio.currentTime;
+   }
+   
+   if(teaser&&!overlayShown&&audio.currentTime>=outroCTA_time){
+     overlay.style.display='flex';
+     overlayShown=true;
+   }
+ });
+ 
+ audio.addEventListener('play',()=>{
+   if(xrMode&&videoReady) {
+     video.play().catch((e)=>{
+       console.error("Video play error:", e);
+       // Try playing without sound as fallback
+       video.muted = true;
+       video.play().catch(e => console.error("Muted play failed:", e));
+     });
+   }
+ });
+ 
+ audio.addEventListener('pause',()=>{
+   if(!video.paused)video.pause();
+ });
+ 
+ // Ensure video visibility
+ document.addEventListener('visibilitychange', () => {
+   if(!document.hidden && xrMode && videoReady && !audio.paused) {
+     video.play().catch(e => console.error("Visibility play error:", e));
+   }
+ });
+ 
+ modeBtn.addEventListener('click',()=>{
+   if(modeBtn.disabled)return;
+   recenter();
+   xrMode=!xrMode;
+   layout();
+   if(xrMode&&videoReady&&!audio.paused) {
+     video.play().catch((e)=>{
+       console.error("Mode toggle play error:", e);
+       // Try with muted as fallback
+       video.muted = true;
+       video.play().catch(e => console.error("Muted play failed:", e));
+     });
+   }
+ });
+ 
+ recBtn.addEventListener('click',recenter);
+ overlay.addEventListener('click',()=>overlay.style.display='none');
+ ctaBox.addEventListener('click',e=>{e.stopPropagation();window.location.href=outroCTA_backlink});
+ 
+ if(!devToggleAllowed)devBtn.style.display='none';
+ 
+ devBtn.addEventListener('click',()=>{
+   teaser=!teaser;
+   overlay.style.display='none';
+   overlayShown=false;
+   xrAllowed=isXR||teaser;
+   xrMode=teaser;
+   layout();
+ });
+ 
+ // Handle chapter navigation
+ $('prevChapter').addEventListener('click', () => {
+   // You could implement chapter navigation logic here
+   console.log("Previous chapter");
+ });
+ 
+ $('nextChapter').addEventListener('click', () => {
+   // You could implement chapter navigation logic here
+   console.log("Next chapter");
+ });
+ 
+ begin.addEventListener('click',async()=>{
+   if(isMobile&&typeof DeviceOrientationEvent!=='undefined'&&DeviceOrientationEvent.requestPermission){
+     try{
+       await DeviceOrientationEvent.requestPermission();
+     }catch(e){
+       console.error("Permission error:", e);
+     }
+   }
+   
+   landing.style.display='none';
+   
+   // Start audio
+   audio.load();
+   audio.play().then(()=>{
+     // If we want to start paused, uncomment: audio.pause()
+   }).catch((e)=>{
+     console.error("Audio play error:", e);
+     // Show some UI to inform user they need to interact
+   });
+   
+   // Force A-Frame to update its rendering
+   if(window.AFRAME) {
+     setTimeout(() => {
+       // Trigger a resize event to force A-Frame to re-render
+       window.dispatchEvent(new Event('resize'));
+       
+       // Additional explicit rendering calls with increasing delays
+       const renderAttempts = [100, 300, 800, 1500];
+       renderAttempts.forEach(delay => {
+         setTimeout(() => {
+           if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+             console.log(`Forcing render at ${delay}ms`);
+             AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+           }
+         }, delay);
+       });
+     }, 100);
+   }
+ });
+ 
+ xrModeBtn.addEventListener('click', () => {
+   if(teaser) return;
+   recenter();
+   xrMode = false;
+   layout();
+ });
+});
+
+// Add this after the DOM content loaded event listener but before the closing script tag
+document.addEventListener('aframeinitialized', function() {
+  console.log("A-Frame initialized");
+  
+  // Force another render after A-Frame is fully initialized
+  setTimeout(() => {
+    if(window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+      console.log("Post-initialization render");
+      AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+      // Trigger resize again
+      window.dispatchEvent(new Event('resize'));
+    }
+  }, 500);
+});
+</script>
+</body>
+</html>
