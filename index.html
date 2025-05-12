@@ -3,12 +3,282 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>360° Audio‑Driven XR Player</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
-<style>html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;color:#fff}#xrContainer{position:absolute;inset:0}#landingOverlay{position:fixed;inset:0;z-index:700;background:#000;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px;text-align:center;gap:20px}#beginBtn{background:#fff;color:#000;border:none;border-radius:30px;padding:18px 36px;font-size:18px;font-weight:600;cursor:pointer;width:calc(100% - 40px);max-width:320px}#audioOnly{position:absolute;top:0;left:0;right:0;display:none;flex-direction:column;align-items:center;padding-top:20px;gap:20px}.artwork-wrapper{position:relative;width:calc(100% - 40px);max-width:400px}.artwork{width:100%;aspect-ratio:1/1;border-radius:16px;object-fit:cover;box-shadow:0 4px 12px rgba(0,0,0,.4)}#toggleModeButton{position:absolute;bottom:10px;right:10px;border:none;border-radius:20px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;transition:opacity .15s}#toggleModeButton.disabled{pointer-events:none;opacity:.5}.status-dot{width:10px;height:10px;border-radius:50%;background:orange;display:inline-block}#trackInfo{position:fixed;bottom:140px;left:50%;transform:translateX(-50%);max-width:calc(100% - 40px);text-align:center;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;z-index:180}#audioPlayer{position:fixed;bottom:80px;left:0;right:0;margin:0 auto;width:calc(100% - 20px);max-width:600px;z-index:200;background:#111;border-radius:6px;padding:2px 0}.chapter-nav{position:fixed;bottom:10px;left:0;right:0;margin:0 auto;width:calc(100% - 20px);max-width:600px;display:flex;gap:10px;z-index:190}.nav-btn{flex:1;background:#222;border:none;border-radius:8px;padding:12px 0;font-size:20px;color:#fff;cursor:pointer}.top-bar{position:fixed;top:20px;left:50%;transform:translateX(-50%);display:flex;gap:12px;z-index:150}.ui-btn{background:rgba(0,0,0,.6);color:#fff;border:none;border-radius:20px;padding:8px 16px;font-size:14px;cursor:pointer}#ctaOverlay{position:fixed;inset:0;background:rgba(0,0,0,.95);display:none;align-items:center;justify-content:center;z-index:500;cursor:pointer}.cta-box{display:flex;flex-direction:column;align-items:center;gap:20px}.cta-logo{width:120px;height:120px;background:#fff;border-radius:50%}#loadingSpinner{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:450;pointer-events:none}.spinner{width:60px;height:60px;border:6px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}</style>
+<style>
+html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;color:#fff}
+
+/* Container styles */
+#xrContainer{position:absolute;inset:0}
+#landingOverlay{position:fixed;inset:0;z-index:700;background:#000;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px;text-align:center;gap:20px}
+#audioOnly{position:absolute;top:0;left:0;right:0;display:none;flex-direction:column;align-items:center;padding-top:20px;gap:20px}
+
+/* Artwork styles */
+.artwork-wrapper{position:relative;width:calc(100% - 40px);max-width:400px}
+.artwork{width:100%;aspect-ratio:1/1;border-radius:16px;object-fit:cover;box-shadow:0 4px 12px rgba(0,0,0,.4)}
+
+/* Standard button styles */
+.btn {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #fff;
+  background: rgba(60, 60, 60, 0.8);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+}
+
+.btn:hover {
+  background: rgba(80, 80, 80, 0.9);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* Button variants */
+.btn-primary {
+  background: rgba(78, 130, 230, 0.9);
+}
+
+.btn-primary:hover {
+  background: rgba(100, 150, 255, 0.95);
+}
+
+.btn-accent {
+  background: rgba(235, 87, 87, 0.9);
+}
+
+.btn-accent:hover {
+  background: rgba(255, 100, 100, 0.95);
+}
+
+/* Touch device adaptations */
+@media (hover: none) {
+  .btn:hover {
+    background: rgba(60, 60, 60, 0.8);
+    transform: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  }
+  
+  .btn-primary:hover {
+    background: rgba(78, 130, 230, 0.9);
+  }
+  
+  .btn-accent:hover {
+    background: rgba(235, 87, 87, 0.9);
+  }
+  
+  .btn:active {
+    opacity: 0.7;
+  }
+}
+
+/* Specific button styles */
+#beginBtn{
+  background: rgba(78, 130, 230, 0.9);
+  border-radius: 30px;
+  padding: 18px 36px;
+  font-size: 18px;
+  font-weight: 600;
+  cursor: pointer;
+  width: calc(100% - 40px);
+  max-width: 320px;
+  color: white;
+}
+
+#beginBtn:hover {
+  background: rgba(100, 150, 255, 0.95);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+#toggleModeButton{
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  border-radius: 20px;
+  padding: 8px 14px;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#toggleModeButton.disabled{
+  pointer-events: none;
+  opacity: .5;
+}
+
+/* Status indicator */
+.status-dot{
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: orange;
+  display: inline-block;
+}
+
+/* Track info display */
+#trackInfo{
+  position: fixed;
+  bottom: 140px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: calc(100% - 40px);
+  text-align: center;
+  font-size: 15px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  z-index: 180;
+}
+
+/* Audio player */
+#audioPlayer{
+  position: fixed;
+  bottom: 80px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: calc(100% - 20px);
+  max-width: 600px;
+  z-index: 200;
+  background: #111;
+  border-radius: 6px;
+  padding: 2px 0;
+}
+
+/* Chapter navigation */
+.chapter-nav{
+  position: fixed;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: calc(100% - 20px);
+  max-width: 600px;
+  display: flex;
+  gap: 10px;
+  z-index: 190;
+}
+
+.nav-btn{
+  flex: 1;
+  background: rgba(40, 40, 40, 0.7);
+  border: none;
+  border-radius: 8px;
+  padding: 12px 0;
+  font-size: 20px;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.nav-btn:hover {
+  background: rgba(60, 60, 60, 0.9);
+}
+
+/* Top bar controls */
+.top-bar{
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 12px;
+  z-index: 150;
+}
+
+.ui-btn{
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  padding: 8px 16px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ui-btn:hover {
+  background: rgba(30, 30, 30, 0.8);
+}
+
+/* CTA overlay */
+#ctaOverlay{
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 500;
+  cursor: pointer;
+}
+
+.cta-box{
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+  transition: transform 0.2s ease;
+}
+
+.cta-box:hover {
+  transform: scale(1.02);
+}
+
+.cta-logo{
+  width: 120px;
+  height: 120px;
+  background: #fff;
+  border-radius: 50%;
+}
+
+/* Loading spinner */
+#loadingSpinner{
+  position: fixed;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 450;
+  pointer-events: none;
+}
+
+.spinner{
+  width: 60px;
+  height: 60px;
+  border: 6px solid #fff;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin{
+  to{
+    transform: rotate(360deg);
+  }
+}
+</style>
 </head>
 <body>
-<div id="landingOverlay"><h1>Welcome to the Chinatown Audio Tour</h1><p>Immerse yourself in history as you explore.</p><button id="beginBtn">Begin Tour</button></div>
+<div id="landingOverlay"><h1>Welcome to the Chinatown Audio Tour</h1><p>Immerse yourself in history as you explore.</p><button id="beginBtn" class="btn">Begin Tour</button></div>
 <div id="xrContainer">
   <a-scene embedded 
     vr-mode-ui="enabled:false" 
@@ -17,20 +287,27 @@
     renderer="antialias: true; alpha: true; precision: high"
     onload="this.renderer.setPixelRatio(window.devicePixelRatio);">
     <a-assets>
-      <video id="video360" crossorigin="anonymous" playsinline webkit-playsinline preload="auto">
+      <video id="video360" crossorigin="anonymous" playsinline webkit-playsinline muted preload="auto">
         <source id="videoSource" type="video/mp4">
       </video>
     </a-assets>
-    <a-videosphere id="videosphere" src="#video360" rotation="0 -90 0"></a-videosphere>
+    <a-videosphere id="videosphere" src="#video360" rotation="0 -90 0" visible="true"></a-videosphere>
     <a-entity id="cameraEntity" camera look-controls="reverseMouseDrag:true;touchEnabled:true" position="0 1.6 0"></a-entity>
   </a-scene>
 </div>
-<div id="audioOnly"><div class="artwork-wrapper"><img id="artworkImg" class="artwork" alt=""><button id="toggleModeButton" class="disabled"><span class="status-dot"></span><span>XR Mode</span></button></div></div>
+<div id="audioOnly"><div class="artwork-wrapper"><img id="artworkImg" class="artwork" alt=""><button id="toggleModeButton" class="btn disabled"><span class="status-dot"></span><span>XR Mode</span></button></div></div>
 <div id="trackInfo"></div>
-<div class="top-bar"><button id="recenterButton" class="ui-btn">Recenter</button><button id="devToggleButton" class="ui-btn">Toggle Teaser</button><button id="xrToggleModeButton" class="ui-btn">Audio Only</button></div>
+<div class="top-bar">
+  <button id="recenterButton" class="ui-btn btn">Recenter</button>
+  <button id="devToggleButton" class="ui-btn btn">Toggle Teaser</button>
+  <button id="xrToggleModeButton" class="ui-btn btn">Audio Only</button>
+</div>
 <div id="loadingSpinner"><div class="spinner"></div></div>
 <audio id="audioPlayer" controls crossorigin="anonymous"></audio>
-<div class="chapter-nav" id="chapterNav"><button id="prevChapter" class="nav-btn">&laquo;</button><button id="nextChapter" class="nav-btn">&raquo;</button></div>
+<div class="chapter-nav" id="chapterNav">
+  <button id="prevChapter" class="nav-btn">&laquo;</button>
+  <button id="nextChapter" class="nav-btn">&raquo;</button>
+</div>
 <div id="ctaOverlay"><div class="cta-box" id="ctaBox"><div class="cta-logo"></div><div class="cta-text">Take the full tour here</div></div></div>
 <script>
 const XR_src="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4";
@@ -81,6 +358,9 @@ window.addEventListener('DOMContentLoaded',()=>{
  vs.src=XR_src;
  video.load();
  
+ // Ensure videosphere is visible
+ videosphere.setAttribute('visible', 'true');
+ 
  // Add error logging for debugging
  video.addEventListener('error', (e) => {
    console.error('Video error:', video.error, e);
@@ -113,6 +393,11 @@ window.addEventListener('DOMContentLoaded',()=>{
    // Ensure A-Frame scene refreshes when made visible
    if(xrMode && xrAllowed) {
      forceAFrameRender();
+     
+     // For mobile, try to play video even if muted
+     if(isMobile && videoReady && !video.playing) {
+       video.play().catch(e => console.log("Initial mobile play attempt:", e));
+     }
    }
  };
  
@@ -126,6 +411,12 @@ window.addEventListener('DOMContentLoaded',()=>{
      AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
      window.dispatchEvent(new Event('resize'));
      
+     // Explicitly check videosphere visibility
+     if(videosphere) {
+       videosphere.setAttribute('visible', 'true');
+       console.log("Ensuring videosphere visibility");
+     }
+     
      // Schedule multiple renders with increasing delays
      const renderDelays = [100, 400, 800, 1500]; 
      let lastDelay = Math.max(...renderDelays);
@@ -135,6 +426,11 @@ window.addEventListener('DOMContentLoaded',()=>{
          if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
            console.log(`Scheduled render at ${delay}ms`);
            AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+           
+           // Check videosphere visibility again during each render
+           if(videosphere) {
+             videosphere.setAttribute('visible', 'true');
+           }
            
            // Only hide spinner after the last render attempt
            if (delay === lastDelay) {
@@ -182,9 +478,20 @@ window.addEventListener('DOMContentLoaded',()=>{
    // Force renderer update
    if(window.AFRAME && AFRAME.scenes[0]) {
      AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+     
+     // Ensure videosphere is visible after video loads
+     if(videosphere) {
+       videosphere.setAttribute('visible', 'true');
+     }
    }
    
    hideSpinner();
+   
+   // For mobile, try to play muted video once it's loaded
+   if(isMobile && xrMode) {
+     video.muted = true;
+     video.play().catch(e => console.log("Auto-play attempt after load:", e));
+   }
  });
  
  audio.addEventListener('canplay',()=>{
@@ -222,11 +529,23 @@ window.addEventListener('DOMContentLoaded',()=>{
  
  audio.addEventListener('play',()=>{
    if(xrMode&&videoReady) {
+     // Try to play with sound first
+     video.muted = false;
      video.play().catch((e)=>{
        console.error("Video play error:", e);
-       // Try playing without sound as fallback
+       // Fall back to muted playback
        video.muted = true;
-       video.play().catch(e => console.error("Muted play failed:", e));
+       video.play().catch(e => {
+         console.error("Muted play failed:", e);
+         
+         // Final fallback attempt - try with a user interaction simulation
+         setTimeout(() => {
+           if(isMobile) {
+             video.muted = true;
+             video.play().catch(e => console.error("Final play attempt failed:", e));
+           }
+         }, 1000);
+       });
      });
    }
  });
@@ -239,8 +558,61 @@ window.addEventListener('DOMContentLoaded',()=>{
  document.addEventListener('visibilitychange', () => {
    if(!document.hidden && xrMode && videoReady && !audio.paused) {
      video.play().catch(e => console.error("Visibility play error:", e));
+     
+     // For mobile, ensure videosphere is visible
+     if(isMobile && videosphere) {
+       setTimeout(() => {
+         videosphere.setAttribute('visible', 'true');
+       }, 300);
+     }
    }
  });
+ 
+ // Add a touchstart event listener to help with iOS playback
+ document.addEventListener('touchstart', () => {
+   if(xrMode && videoReady && !video.playing) {
+     video.play().catch(e => console.log("Touch play attempt:", e));
+   }
+ }, {once: true});
+ 
+ // Add ripple effect for mobile 
+ const addRippleEffect = (button) => {
+   button.addEventListener('click', function(e) {
+     const rect = this.getBoundingClientRect();
+     const x = e.clientX - rect.left;
+     const y = e.clientY - rect.top;
+     
+     const ripple = document.createElement('span');
+     ripple.style.position = 'absolute';
+     ripple.style.width = '0';
+     ripple.style.height = '0';
+     ripple.style.borderRadius = '50%';
+     ripple.style.transform = 'translate(-50%, -50%)';
+     ripple.style.pointerEvents = 'none';
+     ripple.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
+     ripple.style.left = `${x}px`;
+     ripple.style.top = `${y}px`;
+     
+     this.appendChild(ripple);
+     
+     // Animate ripple
+     ripple.animate([
+       { width: '0', height: '0', opacity: 0.5 },
+       { width: '200px', height: '200px', opacity: 0 }
+     ], {
+       duration: 600,
+       easing: 'ease-out'
+     }).onfinish = () => {
+       ripple.remove();
+     };
+   });
+ };
+ 
+ // Apply ripple effect to all buttons if on mobile
+ if(isMobile) {
+   const buttons = document.querySelectorAll('button');
+   buttons.forEach(addRippleEffect);
+ }
  
  modeBtn.addEventListener('click',()=>{
    if(modeBtn.disabled)return;
@@ -248,6 +620,13 @@ window.addEventListener('DOMContentLoaded',()=>{
    xrMode=!xrMode;
    layout();
    if(xrMode&&videoReady&&!audio.paused) {
+     // On mobile, first try with muted
+     if(isMobile) {
+       video.muted = true;
+     } else {
+       video.muted = false;
+     }
+     
      video.play().catch((e)=>{
        console.error("Mode toggle play error:", e);
        // Try with muted as fallback
@@ -294,6 +673,12 @@ window.addEventListener('DOMContentLoaded',()=>{
    
    landing.style.display='none';
    
+   // For mobile, try to play muted video first to help with autoplay restrictions
+   if(isMobile && xrMode && videoReady) {
+     video.muted = true;
+     video.play().catch(e => console.log("Initial click video play:", e));
+   }
+   
    // Start audio
    audio.load();
    audio.play().then(()=>{
@@ -316,6 +701,11 @@ window.addEventListener('DOMContentLoaded',()=>{
            if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
              console.log(`Forcing render at ${delay}ms`);
              AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+             
+             // Ensure videosphere is visible during each render attempt
+             if(videosphere) {
+               videosphere.setAttribute('visible', 'true');
+             }
            }
          }, delay);
        });
@@ -334,6 +724,12 @@ window.addEventListener('DOMContentLoaded',()=>{
 // Add this after the DOM content loaded event listener but before the closing script tag
 document.addEventListener('aframeinitialized', function() {
   console.log("A-Frame initialized");
+  
+  const videosphere = document.getElementById('videosphere');
+  if(videosphere) {
+    videosphere.setAttribute('visible', 'true');
+    console.log("Set videosphere visible on A-Frame init");
+  }
   
   // Force another render after A-Frame is fully initialized
   setTimeout(() => {
