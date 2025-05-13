@@ -5,6 +5,20 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Initial setup to ensure CTA is hidden and teaser mode is off -->
+<script>
+  window.isTeaser = false;
+  window.addEventListener('DOMContentLoaded', function() {
+    var overlay = document.getElementById('ctaOverlay');
+    if (overlay) {
+      overlay.style.display = 'none';
+      console.log("CTA overlay hidden at startup");
+    }
+    
+    // Set a strong initial state
+    document.documentElement.dataset.teaserMode = 'false';
+  });
+</script>
 <!-- PERFORMANCE IMPROVEMENT: Add hardware acceleration hints -->
 <meta name="mobile-web-app-capable" content="yes">
 <meta http-equiv="x-ua-compatible" content="IE=edge">
@@ -152,7 +166,7 @@
       </video>
     </a-assets>
     <a-videosphere id="videosphere" src="#video360" rotation="0 -90 0" visible="true" material="shader: flat; side: back; npot: true;"></a-videosphere>
-    <a-entity id="cameraEntity" camera look-controls="reverseMouseDrag:true;touchEnabled:true" position="0 1.6 0"></a-entity>
+    <a-entity id="cameraEntity" camera look-controls="reverseMouseDrag:true;touchEnabled:true;smoothingEnabled:true;smoothingFactor:0.15" position="0 1.6 0"></a-entity>
   </a-scene>
 </div>
 <div id="audioOnly" class="audio-container">
@@ -179,7 +193,7 @@
     <button id="nextChapter" class="nav-btn" aria-label="Next Chapter">&raquo;</button>
   </div>
 </div>
-<div id="ctaOverlay" class="overlay">
+<div id="ctaOverlay" class="overlay" style="display: none !important;">
   <div class="cta-box" id="ctaBox">
     <div class="cta-logo"></div>
     <div class="cta-text">Take the full tour here</div>
@@ -191,6 +205,24 @@
   <button id="xrToggleModeButton" class="ui-btn btn secondary-btn" aria-label="Switch to Audio Only">Audio Only</button>
 </div>
 <!-- Load script at the end for faster initial page load -->
+<script>
+// Ensure the page starts in the correct state
+document.addEventListener('DOMContentLoaded', function() {
+  // Make sure CTA overlay is hidden
+  document.getElementById('ctaOverlay').style.display = 'none';
+  
+  // Ensure inertia on camera controls
+  const cameraEntity = document.getElementById('cameraEntity');
+  if (cameraEntity) {
+    const currentControls = cameraEntity.getAttribute('look-controls');
+    if (typeof currentControls === 'string') {
+      if (!currentControls.includes('smoothingEnabled')) {
+        cameraEntity.setAttribute('look-controls', currentControls + ';smoothingEnabled:true;smoothingFactor:0.15');
+      }
+    }
+  }
+});
+</script>
 <script src="script.js" defer></script>
 </body>
 </html>

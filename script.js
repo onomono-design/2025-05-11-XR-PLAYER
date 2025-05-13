@@ -387,6 +387,17 @@ window.addEventListener('DOMContentLoaded',()=>{
  const chapterNav=$('chapterNav');
  const videosphere=$('videosphere');
  
+ // Initialize with teaser mode EXPLICITLY disabled and CTA overlay hidden
+ let teaser = false; // Force to false regardless of the constant value
+ let xrAllowed = isXR || teaser;
+ let xrMode = false;
+ let videoReady = false;
+ let audioReady = false;
+ let overlayShown = false;
+ 
+ // Ensure CTA overlay is hidden at startup
+ overlay.style.display = 'none';
+ 
  // ENHANCEMENT: Create error container
  const errorContainer = document.createElement('div');
  errorContainer.id = 'errorContainer';
@@ -612,8 +623,6 @@ window.addEventListener('DOMContentLoaded',()=>{
 
  art.src=thumbnail_src;
  track.textContent=`Chapter ${chapterOrder} – ${chapterName} | ${tourName}`;
- let teaser=isTeaser,xrAllowed=isXR||teaser,xrMode=false;
- let videoReady=false,audioReady=false,overlayShown=false;
  const dot=modeBtn.querySelector('.status-dot');
  
  const updateXrButton=()=>{
@@ -803,7 +812,7 @@ window.addEventListener('DOMContentLoaded',()=>{
  // Start observing the container for visibility changes
  containerObserver.observe(xrWrap, { attributes: true });
  
- if(teaser)xrMode=true;
+ // Set initial layout
  layout();
  updateXrButton();
 
@@ -1068,60 +1077,62 @@ window.addEventListener('DOMContentLoaded',()=>{
  function recenter(){
    if(!camera || !window.AFRAME) return;
    
-   // Store current state before recenter
-   showSpinner();
+   // Show feedback
    showUserMessage(isMobile ? "Recentering view based on device orientation" : "Resetting camera view", 1500);
    
    // Check if we're on mobile
    if (isMobile) {
-     // For mobile, we need to adjust both the camera orientation 
-     // and videosphere to reset the view
-     
-     // First, reset camera position to standard height
-     camera.setAttribute('position', {x: 0, y: 1.6, z: 0});
-     
-     // For mobile we can't simply set rotation to 0,0,0 because device
-     // orientation is driving the camera. Instead we need to 
-     // adjust the videosphere to match the camera
-     
      try {
-       // Get current camera rotation
-       const camRotation = camera.getAttribute('rotation');
+       // For mobile, adjusting the videosphere is the most reliable way to recenter
        
-       // Get videosphere
-       if (videosphere) {
-         // Calculate adjustment - we're only resetting the Y axis (heading)
-         const currentY = camRotation.y || 0;
+       // First, get current device orientation if available
+       let deviceAlpha = 0;
+       window.addEventListener('deviceorientation', function orientationHandler(event) {
+         if (event.alpha !== null) {
+           deviceAlpha = event.alpha;
+         }
+         window.removeEventListener('deviceorientation', orientationHandler);
          
-         // Apply offset to videosphere rotation to reset relative view
-         // Preserve the original -90 offset on Y axis
-         videosphere.setAttribute('rotation', {
-           x: initialVideosphereRotation.x,
-           y: initialVideosphereRotation.y - currentY, 
-           z: initialVideosphereRotation.z
-         });
+         // Step 2: Adjust the videosphere based on device orientation
+         // We want to reset the videosphere so that current direction becomes "front"
+         if (videosphere) {
+           const currentY = camera.getAttribute('rotation').y || 0;
+           
+           // Apply adjustment to videosphere (maintain the -90 base offset)
+           videosphere.setAttribute('rotation', {
+             x: initialVideosphereRotation.x,
+             y: initialVideosphereRotation.y - currentY, 
+             z: initialVideosphereRotation.z
+           });
+           
+           console.log(`Recentered on mobile: camera Y = ${currentY}, adjusted videosphere Y = ${initialVideosphereRotation.y - currentY}`);
+         }
          
-         console.log(`Recentered on mobile: camera Y = ${currentY}, adjusted videosphere Y = ${initialVideosphereRotation.y - currentY}`);
-       }
+         // Force immediate render to show changes
+         forceAFrameRender();
+       }, { once: true });
        
-       // Force a render to show the changes
-       if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-         AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-       }
+       // If no device orientation event fires within 200ms, just use camera rotation
+       setTimeout(() => {
+         if (videosphere) {
+           const currentY = camera.getAttribute('rotation').y || 0;
+           
+           // Apply adjustment to videosphere (maintain the -90 base offset)
+           videosphere.setAttribute('rotation', {
+             x: initialVideosphereRotation.x,
+             y: initialVideosphereRotation.y - currentY, 
+             z: initialVideosphereRotation.z
+           });
+           
+           console.log(`Recentered on mobile (timeout): camera Y = ${currentY}, adjusted videosphere Y = ${initialVideosphereRotation.y - currentY}`);
+           
+           // Force immediate render
+           forceAFrameRender();
+         }
+       }, 200);
      } catch (e) {
        console.error("Error during mobile recenter:", e);
      }
-     
-     // ENHANCEMENT: Add additional feedback for orientation issues
-     window.addEventListener('deviceorientation', function orientationCheck(event) {
-       // If no useful orientation data, show guidance
-       if (event.alpha === null || event.beta === null || event.gamma === null) {
-         showUserMessage("Please rotate your device to enable orientation tracking", 3000);
-       }
-       
-       // Only need to check once
-       window.removeEventListener('deviceorientation', orientationCheck);
-     }, { once: true });
    } else {
      // Desktop approach - simply reset the camera orientation
      camera.setAttribute('position', {x: 0, y: 1.6, z: 0});
@@ -1132,13 +1143,10 @@ window.addEventListener('DOMContentLoaded',()=>{
      });
      
      console.log("Recentered on desktop");
-   }
-   
-   // Force a render after recenter
-   setTimeout(() => {
+     
+     // Force immediate render
      forceAFrameRender();
-     hideSpinner();
-   }, 50);
+   }
  }
  
  audio.addEventListener('loadeddata',()=>{
@@ -1175,9 +1183,11 @@ window.addEventListener('DOMContentLoaded',()=>{
  
  // Time update event for CTA overlay
  audio.addEventListener('timeupdate',()=>{
-   if(teaser&&!overlayShown&&audio.currentTime>=outroCTA_time){
-     overlay.style.display='flex';
-     overlayShown=true;
+   // Only show CTA overlay if we're in teaser mode, it's not already shown, 
+   // and we've reached the specified time
+   if(teaser && !overlayShown && audio.currentTime >= outroCTA_time){
+     overlay.style.display = 'flex';
+     overlayShown = true;
    }
  });
  
@@ -1188,11 +1198,7 @@ window.addEventListener('DOMContentLoaded',()=>{
    const wasPlaying = !audio.paused;
    const currentTime = audio.currentTime;
    
-   // If playing, pause temporarily to prevent race conditions
-   if (wasPlaying) {
-     audio.pause();
-     if (!video.paused) video.pause();
-   }
+   // No need to pause - this was causing the interruption
    
    recenter();
    xrMode=!xrMode;
@@ -1202,28 +1208,22 @@ window.addEventListener('DOMContentLoaded',()=>{
    setTimeout(() => {
      // Always resync time after mode change
      if (xrMode && videoReady) {
-       // NEW: Use a hard seek here, it's an explicit user action
+       // Set video time without interrupting playback
        video.currentTime = currentTime;
        
        // Set up new sync interval with optimized function
-       setupSyncInterval();
-     }
-     
-     // Resume playback if it was playing before
-     if (wasPlaying) {
-       audio.currentTime = currentTime; // Ensure audio time is still correct
-       audio.play().then(() => {
-         if (xrMode && videoReady) {
-           // Always ensure video is muted
-           video.currentTime = audio.currentTime; // Resync one last time
-           video.muted = true;
-           
-           video.play().catch((e) => {
-             console.error("Mode toggle play error:", e);
-             setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
-           });
-         }
-       }).catch(e => console.error("Audio resume error:", e));
+       if (typeof setupSyncInterval === 'function') {
+         setupSyncInterval();
+       }
+       
+       // If audio is playing, also make sure video is playing
+       if (wasPlaying) {
+         video.muted = true;
+         video.play().catch((e) => {
+           console.error("Mode toggle play error:", e);
+           setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
+         });
+       }
      }
    }, 50);
  });
@@ -1239,7 +1239,14 @@ window.addEventListener('DOMContentLoaded',()=>{
    overlay.style.display='none';
    overlayShown=false;
    xrAllowed=isXR||teaser;
-   xrMode=teaser;
+   
+   // Don't force XR mode when enabling teaser, respect current mode
+   if (teaser) {
+     showUserMessage("Teaser mode enabled", 1500);
+   } else {
+     showUserMessage("Teaser mode disabled", 1500);
+   }
+   
    layout();
  });
  
@@ -1350,29 +1357,39 @@ window.addEventListener('DOMContentLoaded',()=>{
  xrModeBtn.addEventListener('click', () => {
    if(teaser) return;
    
-   // Store the current play state and time to restore after mode change
+   // Store the current play state and time
    const wasPlaying = !audio.paused;
    const currentTime = audio.currentTime;
    
-   // If playing, pause temporarily to prevent race conditions
-   if (wasPlaying) {
-     audio.pause();
-     if (!video.paused) video.pause();
-   }
+   // No need to pause - just switch modes directly
    
    recenter();
    xrMode = false;
    layout();
    
-   // Short timeout to let the DOM update before adjusting playback
+   // Short timeout to let the DOM update before continuing
    setTimeout(() => {
-     // Resume playback if it was playing before
-     if (wasPlaying) {
-       audio.currentTime = currentTime; // Ensure audio time is still correct
-       audio.play().catch(e => console.error("Audio resume error:", e));
-     }
+     // Nothing else needed here as audio continues playing
    }, 50);
  });
+
+ // Add a setupSyncInterval function if it doesn't exist
+ let syncInterval;
+ const setupSyncInterval = () => {
+   if (syncInterval) clearInterval(syncInterval);
+   
+   syncInterval = setInterval(() => {
+     if (!video || !xrMode || !videoReady || video.paused || audio.paused) return;
+     
+     // Simple sync - adjust video time if too far from audio
+     const diff = Math.abs(video.currentTime - audio.currentTime);
+     if (diff > 0.5) {
+       video.currentTime = audio.currentTime;
+     }
+   }, 1000);
+   
+   return syncInterval;
+ };
 });
 
 // Optimize the THREE.js video texture handling for mobile
@@ -1450,6 +1467,25 @@ document.addEventListener('aframeinitialized', function() {
         console.log("Advanced WebGL optimization failed:", e);
       }
     }
+  }
+  
+  // Add inertia to camera controls
+  const cameraEntity = document.getElementById('cameraEntity');
+  if (cameraEntity) {
+    // Get current look-controls component
+    const lookControlsComponent = cameraEntity.getAttribute('look-controls');
+    
+    // Add inertia parameters to look-controls
+    const updatedLookControls = {
+      ...lookControlsComponent,
+      smoothingFactor: 0.15, // Lower value = more inertia
+      smoothingEnabled: true
+    };
+    
+    // Update the component with new settings
+    cameraEntity.setAttribute('look-controls', updatedLookControls);
+    
+    console.log("Added inertia to camera controls");
   }
 });
 
