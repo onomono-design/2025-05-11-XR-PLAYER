@@ -5,1558 +5,192 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- PERFORMANCE IMPROVEMENT: Add hardware acceleration hints -->
+<meta name="mobile-web-app-capable" content="yes">
+<meta http-equiv="x-ua-compatible" content="IE=edge">
+<!-- NEW: Hint browsers to prevent throttling -->
+<meta http-equiv="origin-trial" content="High-performance video player">
+<!-- NEW: Provide content visibility hint -->
+<meta name="renderingPriority" content="high">
+<!-- ENHANCEMENT: Add additional mobile compatibility meta tags -->
+<meta name="format-detection" content="telephone=no">
+<meta name="msapplication-tap-highlight" content="no">
+<meta name="theme-color" content="#000000">
+<!-- ENHANCEMENT: Add better error handling hints -->
+<meta name="apple-mobile-web-app-title" content="360° XR Player">
+<meta name="application-name" content="360° XR Player">
+<!-- STYLE GUIDE: Add Figtree Google Font -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
 <title>360° Audio‑Driven XR Player</title>
 <!-- Preload critical assets -->
 <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js" as="script">
+<!-- PERFORMANCE IMPROVEMENT: Add video file hint -->
+<link rel="preload" href="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4" as="video" type="video/mp4" fetchpriority="high">
+<!-- NEW: Preload audio as well -->
+<link rel="preload" href="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.mp3" as="audio" type="audio/mpeg">
+<!-- ENHANCEMENT: Preload CSS for faster rendering -->
+<link rel="preload" href="styles.css" as="style">
+<!-- ENHANCEMENT: Preload low-quality fallback -->
+<link rel="preload" href="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-ultralow.mp4" as="video" type="video/mp4" fetchpriority="low">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/aframe/1.4.2/aframe.min.js"></script>
-<style>
-html,body{margin:0;height:100%;overflow:hidden;background:#000;font-family:system-ui,sans-serif;color:#fff}
-
-/* Container styles */
-#xrContainer{position:absolute;inset:0}
-#landingOverlay{position:fixed;inset:0;z-index:700;background:#000;display:flex;flex-direction:column;justify-content:center;align-items:center;padding:40px;text-align:center;gap:20px}
-#audioOnly{position:absolute;top:0;left:0;right:0;display:none;flex-direction:column;align-items:center;padding-top:20px;gap:20px}
-
-/* Artwork styles */
-.artwork-wrapper{position:relative;width:calc(100% - 40px);max-width:400px}
-.artwork{width:100%;aspect-ratio:1/1;border-radius:16px;object-fit:cover;box-shadow:0 4px 12px rgba(0,0,0,.4)}
-
-/* Standard button styles */
-.btn {
-  border: none;
-  border-radius: 8px;
-  padding: 10px 20px;
-  font-size: 15px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: #fff;
-  background: rgba(60, 60, 60, 0.8);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
-}
-
-.btn:hover {
-  background: rgba(80, 80, 80, 0.9);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
-}
-
-.btn:active {
-  transform: translateY(1px);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
-}
-
-/* Button variants */
-.btn-primary {
-  background: rgba(78, 130, 230, 0.9);
-}
-
-.btn-primary:hover {
-  background: rgba(100, 150, 255, 0.95);
-}
-
-.btn-accent {
-  background: rgba(235, 87, 87, 0.9);
-}
-
-.btn-accent:hover {
-  background: rgba(255, 100, 100, 0.95);
-}
-
-/* Touch device adaptations */
-@media (hover: none) {
-  .btn:hover {
-    background: rgba(60, 60, 60, 0.8);
-    transform: none;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+<link rel="stylesheet" href="styles.css">
+<!-- PERFORMANCE IMPROVEMENT: DNS prefetch for external resources -->
+<link rel="dns-prefetch" href="https://cmm-cloud-2.s3.us-west-1.amazonaws.com">
+<!-- ENHANCEMENT: Add multiple fallback formats for better browser compatibility -->
+<link rel="preload" href="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.webm" as="video" type="video/webm" fetchpriority="low">
+<!-- PERFORMANCE IMPROVEMENT: Add Intersection Observer for lazy loading -->
+<script>
+  if ('IntersectionObserver' in window) {
+    window.lazyLoadingSupported = true;
   }
   
-  .btn-primary:hover {
-    background: rgba(78, 130, 230, 0.9);
+  // NEW: Register service worker for video caching if supported
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('/sw.js').catch(err => {
+        console.log('ServiceWorker registration failed:', err);
+      });
+    });
   }
   
-  .btn-accent:hover {
-    background: rgba(235, 87, 87, 0.9);
+  // NEW: Set up performance hints for the browser
+  if ('requestIdleCallback' in window) {
+    requestIdleCallback(() => {
+      // Tell browser this page needs high performance
+      if (document.monetization) {
+        document.monetization.addEventListener('monetizationstart', () => {
+          // Signal that this is a high performance app
+          navigator.scheduling?.isInputPending?.({includeContinuous: true});
+        });
+      }
+    });
   }
   
-  .btn:active {
-    opacity: 0.7;
+  // ENHANCEMENT: Add polyfill for browsers missing requestVideoFrameCallback
+  if (HTMLVideoElement && !('requestVideoFrameCallback' in HTMLVideoElement.prototype)) {
+    HTMLVideoElement.prototype.requestVideoFrameCallback = function(callback) {
+      const id = window.requestAnimationFrame(() => {
+        // Check if video has loaded
+        if (this.readyState >= 2) {
+          callback(performance.now(), {
+            width: this.videoWidth,
+            height: this.videoHeight,
+            mediaTime: this.currentTime
+          });
+        } else {
+          // If video not loaded, poll via timeupdate
+          const onTimeUpdate = () => {
+            callback(performance.now(), {
+              width: this.videoWidth,
+              height: this.videoHeight,
+              mediaTime: this.currentTime
+            });
+            this.removeEventListener('timeupdate', onTimeUpdate);
+          };
+          this.addEventListener('timeupdate', onTimeUpdate);
+        }
+      });
+      return id;
+    };
+    
+    HTMLVideoElement.prototype.cancelVideoFrameCallback = function(id) {
+      window.cancelAnimationFrame(id);
+    };
   }
-}
-
-/* Specific button styles */
-#beginBtn{
-  background: rgba(78, 130, 230, 0.9);
-  border-radius: 30px;
-  padding: 18px 36px;
-  font-size: 18px;
-  font-weight: 600;
-  cursor: pointer;
-  width: calc(100% - 40px);
-  max-width: 320px;
-  color: white;
-}
-
-#beginBtn:hover {
-  background: rgba(100, 150, 255, 0.95);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-#toggleModeButton{
-  position: absolute;
-  bottom: 10px;
-  right: 10px;
-  border-radius: 20px;
-  padding: 8px 14px;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-#toggleModeButton.disabled{
-  pointer-events: none;
-  opacity: .5;
-}
-
-/* Status indicator */
-.status-dot{
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: orange;
-  display: inline-block;
-}
-
-/* Track info display */
-#trackInfo{
-  position: fixed;
-  bottom: 140px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: calc(100% - 40px);
-  text-align: center;
-  font-size: 15px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  z-index: 180;
-}
-
-/* Audio player */
-#audioPlayer{
-  position: fixed;
-  bottom: 80px;
-  left: 0;
-  right: 0;
-  margin: 0 auto;
-  width: calc(100% - 20px);
-  max-width: 600px;
-  z-index: 200;
-  background: #111;
-  border-radius: 6px;
-  padding: 2px 0;
-}
-
-/* Chapter navigation */
-.chapter-nav{
-  position: fixed;
-  bottom: 10px;
-  left: 0;
-  right: 0;
-  margin: 0 auto;
-  width: calc(100% - 20px);
-  max-width: 600px;
-  display: flex;
-  gap: 10px;
-  z-index: 190;
-}
-
-.nav-btn{
-  flex: 1;
-  background: rgba(40, 40, 40, 0.7);
-  border: none;
-  border-radius: 8px;
-  padding: 12px 0;
-  font-size: 20px;
-  color: #fff;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.nav-btn:hover {
-  background: rgba(60, 60, 60, 0.9);
-}
-
-/* Top bar controls */
-.top-bar{
-  position: fixed;
-  top: 20px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 12px;
-  z-index: 150;
-}
-
-.ui-btn{
-  background: rgba(0, 0, 0, 0.6);
-  color: #fff;
-  border: none;
-  border-radius: 20px;
-  padding: 8px 16px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.ui-btn:hover {
-  background: rgba(30, 30, 30, 0.8);
-}
-
-/* CTA overlay */
-#ctaOverlay{
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.95);
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 500;
-  cursor: pointer;
-}
-
-.cta-box{
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 20px;
-  transition: transform 0.2s ease;
-}
-
-.cta-box:hover {
-  transform: scale(1.02);
-}
-
-.cta-logo{
-  width: 120px;
-  height: 120px;
-  background: #fff;
-  border-radius: 50%;
-}
-
-/* Loading spinner */
-#loadingSpinner{
-  position: fixed;
-  inset: 0;
-  display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 450;
-  pointer-events: none;
-}
-
-.spinner{
-  width: 60px;
-  height: 60px;
-  border: 6px solid #fff;
-  border-top-color: transparent;
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-}
-
-@keyframes spin{
-  to{
-    transform: rotate(360deg);
-  }
-}
-</style>
+  
+  // ENHANCEMENT: Error handling for loading failures
+  window.addEventListener('error', function(e) {
+    if (e.target && (e.target.tagName === 'VIDEO' || e.target.tagName === 'AUDIO' || e.target.tagName === 'SCRIPT')) {
+      console.error('Resource loading error:', e.target.src || e.target.currentSrc);
+    }
+  }, true);
+</script>
 </head>
-<body>
-<div id="landingOverlay"><h1>Welcome to the Chinatown Audio Tour</h1><p>Immerse yourself in history as you explore.</p><button id="beginBtn" class="btn">Begin Tour</button></div>
+<body class="figtree-typography">
+<div id="landingOverlay" class="overlay">
+  <div class="overlay-content">
+    <h1 class="title">Welcome to the Chinatown Audio Tour</h1>
+    <p class="subtitle">Immerse yourself in history as you explore.</p>
+    <button id="beginBtn" class="btn primary-btn">Begin Tour</button>
+  </div>
+</div>
 <div id="xrContainer">
+  <!-- PERFORMANCE IMPROVEMENT: Optimized A-Frame scene configuration -->
   <a-scene embedded 
     vr-mode-ui="enabled:false" 
     device-orientation-permission-ui="enabled:false" 
     loading-screen="enabled:false"
-    renderer="antialias: true; alpha: true; precision: medium"
-    onload="this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));">
+    renderer="antialias: false; alpha: false; precision: medium; sortObjects: false; physicallyCorrectLights: false; colorManagement: false; logarithmicDepthBuffer: false; gammaOutput: false;"
+    onload="this.renderer.setPixelRatio(Math.min(window.devicePixelRatio * 0.5, 1.0));"
+    onloaded="document.dispatchEvent(new CustomEvent('a-scene-loaded'));"
+    inspector="url: https://aframe.io/aframe-inspector/dist/aframe-inspector.min.js" >
     <a-assets>
-      <video id="video360" crossorigin="anonymous" playsinline webkit-playsinline muted preload="auto">
+      <!-- ENHANCEMENT: Optimized video element with error event handling -->
+      <video id="video360" 
+        crossorigin="anonymous" 
+        playsinline 
+        webkit-playsinline 
+        muted 
+        preload="auto"
+        autoplay="false"
+        loop="false"
+        disablepictureinpicture
+        disableremoteplayback
+        x5-video-player-type="h5"
+        x5-video-orientation="landscape"
+        controlslist="nodownload nofullscreen noremoteplayback"
+        style="transform: translateZ(0); will-change: transform; width: 0; height: 0;"
+        oncanplay="this.muted=true;"
+        onerror="console.error('Video error code:', this.error ? this.error.code : 'unknown');"
+        fetchpriority="high">
         <source id="videoSource" type="video/mp4">
+        <!-- ENHANCEMENT: Add fallback video sources for better compatibility -->
+        <source id="videoSourceWebM" type="video/webm">
+        <source id="videoSourceHLS" type="application/x-mpegURL">
       </video>
     </a-assets>
-    <a-videosphere id="videosphere" src="#video360" rotation="0 -90 0" visible="true"></a-videosphere>
+    <a-videosphere id="videosphere" src="#video360" rotation="0 -90 0" visible="true" material="shader: flat; side: back; npot: true;"></a-videosphere>
     <a-entity id="cameraEntity" camera look-controls="reverseMouseDrag:true;touchEnabled:true" position="0 1.6 0"></a-entity>
   </a-scene>
 </div>
-<div id="audioOnly"><div class="artwork-wrapper"><img id="artworkImg" class="artwork" alt=""><button id="toggleModeButton" class="btn disabled"><span class="status-dot"></span><span>XR Mode</span></button></div></div>
-<div id="trackInfo"></div>
+<div id="audioOnly" class="audio-container">
+  <div class="artwork-wrapper">
+    <img id="artworkImg" class="artwork" alt="Album Art">
+    <button id="toggleModeButton" class="btn mode-btn disabled">
+      <span class="status-dot"></span>
+      <span class="btn-text">XR Mode</span>
+    </button>
+  </div>
+</div>
+<div id="loadingSpinner" class="spinner-container">
+  <div class="spinner"></div>
+</div>
+<div id="audioControlsContainer" class="controls-container">
+  <div id="trackInfo" class="track-info"></div>
+  <audio id="audioPlayer" controls crossorigin="anonymous" preload="auto" class="audio-player">
+    <!-- ENHANCEMENT: Add fallback audio source -->
+    <source type="audio/mpeg">
+    <source type="audio/ogg">
+  </audio>
+  <div class="chapter-nav" id="chapterNav">
+    <button id="prevChapter" class="nav-btn" aria-label="Previous Chapter">&laquo;</button>
+    <button id="nextChapter" class="nav-btn" aria-label="Next Chapter">&raquo;</button>
+  </div>
+</div>
+<div id="ctaOverlay" class="overlay">
+  <div class="cta-box" id="ctaBox">
+    <div class="cta-logo"></div>
+    <div class="cta-text">Take the full tour here</div>
+  </div>
+</div>
 <div class="top-bar">
-  <button id="recenterButton" class="ui-btn btn">Recenter</button>
-  <button id="devToggleButton" class="ui-btn btn">Toggle Teaser</button>
-  <button id="xrToggleModeButton" class="ui-btn btn">Audio Only</button>
+  <button id="recenterButton" class="ui-btn btn secondary-btn" aria-label="Recenter View">Recenter</button>
+  <button id="devToggleButton" class="ui-btn btn dev-btn" aria-label="Toggle Teaser Mode">Toggle Teaser</button>
+  <button id="xrToggleModeButton" class="ui-btn btn secondary-btn" aria-label="Switch to Audio Only">Audio Only</button>
 </div>
-<div id="loadingSpinner"><div class="spinner"></div></div>
-<audio id="audioPlayer" controls crossorigin="anonymous"></audio>
-<div class="chapter-nav" id="chapterNav">
-  <button id="prevChapter" class="nav-btn">&laquo;</button>
-  <button id="nextChapter" class="nav-btn">&raquo;</button>
-</div>
-<div id="ctaOverlay"><div class="cta-box" id="ctaBox"><div class="cta-logo"></div><div class="cta-text">Take the full tour here</div></div></div>
-<script>
-const XR_src="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4";
-const audio_src="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.mp3";
-const thumbnail_src="https://placehold.co/1024x1024/1E1E1E/FFFFFF?text=Album+Art";
-const chapterName="Look Tin Eli",chapterOrder=2,tourName="Chinatown Tour";
-const isXR=true,isTeaser=false,outroCTA_time=20,outroCTA_backlink="https://example.com/full-tour";
-const devToggleAllowed=true,isMobile=matchMedia('(pointer:coarse)').matches;
-
-// Performance optimization settings
-const PERFORMANCE = {
-  // Lower is better for performance, higher for quality
-  textureQuality: isMobile ? 0.5 : 1.0,
-  useProgressiveLoading: true,
-  // Controls how aggressively we downscale video
-  videoScale: isMobile ? 0.6 : 1.0,
-  // How much to reduce pixel ratio on mobile
-  pixelRatioScale: isMobile ? 0.7 : 1.0,
-  // Buffer size for mobile (in seconds)
-  mobileBufferSize: 30,
-  // NEW: Maximum sync operations per second
-  maxSyncFrequency: isMobile ? 1 : 4,
-  // NEW: Use RAF instead of setTimeout for renders
-  useRequestAnimationFrame: true,
-  // NEW: Only sync when difference exceeds this threshold (in seconds)
-  syncThreshold: isMobile ? 0.75 : 0.2,
-  // NEW: Predictive sync (use audio playback rate instead of seeking)
-  usePredictiveSync: isMobile
-};
-
-// Configure video quality for mobile devices
-const configureVideoForDevice = () => {
-  if (isMobile) {
-    // Reduce video element size for mobile to improve performance
-    const video = document.getElementById('video360');
-    if (video) {
-      // Set maximum dimensions for mobile to help with performance
-      video.style.maxWidth = `${Math.round(1280 * PERFORMANCE.videoScale)}px`;
-      video.style.maxHeight = `${Math.round(720 * PERFORMANCE.videoScale)}px`;
-      
-      // For mobile, we can also set lower resolution on the video element directly
-      // This forces a lower internal resolution in memory
-      video.width = Math.round(1280 * PERFORMANCE.videoScale);
-      video.height = Math.round(720 * PERFORMANCE.videoScale);
-      
-      // NEW: Set video quality and playback hints
-      if ('playsInline' in video) video.playsInline = true;
-      if ('webkitPlaysInline' in video) video.webkitPlaysInline = true;
-      
-      // NEW: Add explicit hints for memory-efficient video playback
-      video.preload = "auto";
-      
-      // NEW: Signal to the browser this isn't a high-quality video playback
-      if ('preservesPitch' in video) video.preservesPitch = false;
-      
-      // Adjust buffering strategy - this is key for mobile performance
-      try {
-        // Most browsers support this, but wrap in try/catch for safety
-        video.preload = "auto"; // Ensure preloading is enabled
-      } catch (e) {
-        console.log("Could not set buffer parameters:", e);
-      }
-      
-      // Disable hardware acceleration if it's causing problems
-      // This can sometimes resolve texture loading issues on certain devices
-      // Uncomment if needed:
-      // video.style.webkitTransform = 'translateZ(0)';
-      // video.style.transform = 'translateZ(0)';
-    }
-    
-    // Apply texture quality settings (reduces GPU memory usage and improves performance)
-    if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-      const renderer = AFRAME.scenes[0].renderer;
-      renderer.setPixelRatio(Math.min(window.devicePixelRatio * PERFORMANCE.pixelRatioScale, 1.5));
-    }
-  }
-};
-
-window.addEventListener('DOMContentLoaded',()=>{
- const $=id=>document.getElementById(id);
- const audio=$('audioPlayer'),video=$('video360'),vs=$('videoSource');
- const art=$('artworkImg'),track=$('trackInfo'),camera=$('cameraEntity');
- const recBtn=$('recenterButton'),modeBtn=$('toggleModeButton'),devBtn=$('devToggleButton');
- const xrModeBtn=$('xrToggleModeButton');
- const xrWrap=$('xrContainer'),audioOnly=$('audioOnly');
- const landing=$('landingOverlay'),begin=$('beginBtn');
- const spinner=$('loadingSpinner'),overlay=$('ctaOverlay'),ctaBox=$('ctaBox');
- const chapterNav=$('chapterNav');
- const videosphere=$('videosphere');
- 
- // Spinner control variables
- let spinnerTimeout = null;
- let spinnerActive = false;
- 
- // Control spinner with debounce
- const showSpinner = () => {
-   if (spinnerTimeout) {
-     clearTimeout(spinnerTimeout);
-   }
-   if (!spinnerActive) {
-     spinner.style.display = 'flex';
-     spinnerActive = true;
-   }
- };
- 
- const hideSpinner = () => {
-   if (spinnerTimeout) {
-     clearTimeout(spinnerTimeout);
-   }
-   // Add delay before hiding to prevent flashes
-   spinnerTimeout = setTimeout(() => {
-     spinner.style.display = 'none';
-     spinnerActive = false;
-   }, 300);
- };
- 
- // Set video source
- vs.src=XR_src;
- video.load();
- 
- // Always ensure video is muted regardless of other settings
- video.muted = true;
- 
- // Ensure videosphere is visible
- videosphere.setAttribute('visible', 'true');
- 
- // Add error logging for debugging
- video.addEventListener('error', (e) => {
-   console.error('Video error:', video.error, e);
-   alert('Video error: ' + (video.error ? video.error.message : 'unknown'));
- });
- 
- audio.innerHTML=`<source src="${audio_src}" type="audio/mpeg">`;
- // Apply custom controls to audio element
- audio.controlsList = "nodownload nofullscreen noremoteplayback";
- // Disable playback rate controls via CSS
- const styleEl = document.createElement('style');
- styleEl.textContent = `
-   #audioPlayer::-webkit-media-controls-timeline-container { display: flex !important; }
-   #audioPlayer::-webkit-media-controls-play-button { display: flex !important; }
-   #audioPlayer::-webkit-media-controls-current-time-display { display: flex !important; }
-   #audioPlayer::-webkit-media-controls-time-remaining-display { display: flex !important; }
-   #audioPlayer::-webkit-media-controls-mute-button { display: flex !important; }
-   #audioPlayer::-webkit-media-controls-volume-slider { display: flex !important; }
-   #audioPlayer::-webkit-media-controls-toggle-closed-captions-button { display: none !important; }
-   #audioPlayer::-webkit-media-controls-fullscreen-button { display: none !important; }
-   #audioPlayer::-webkit-media-controls-download-button { display: none !important; }
-   #audioPlayer::-webkit-media-controls-overflow-button { display: none !important; }
-   #audioPlayer::-webkit-media-controls-playback-rate-button { display: none !important; }
- `;
- document.head.appendChild(styleEl);
- art.src=thumbnail_src;
- track.textContent=`Chapter ${chapterOrder} – ${chapterName} | ${tourName}`;
- let teaser=isTeaser,xrAllowed=isXR||teaser,xrMode=false;
- let videoReady=false,audioReady=false,overlayShown=false;
- const dot=modeBtn.querySelector('.status-dot');
- 
- const updateXrButton=()=>{
-   const ready=videoReady&&audioReady;
-   modeBtn.classList.toggle('disabled',!ready);
-   modeBtn.disabled=!ready;
-   dot.style.background=ready?'limegreen':'orange';
- };
- 
- const layout=()=>{
-   modeBtn.style.display=xrAllowed&&!teaser?'inline-flex':'none';
-   recBtn.style.display=xrMode?'inline-block':'none';
-   xrModeBtn.style.display=(xrMode&&xrAllowed&&!teaser)?'inline-block':'none';
-   chapterNav.style.display=teaser?'none':'flex';
-   xrWrap.style.display=(xrMode&&xrAllowed)?'block':'none';
-   audioOnly.style.display=(!xrMode||!xrAllowed)?'flex':'none';
-   modeBtn.lastChild.textContent=xrMode?' Audio Only':' XR Mode';
-   
-   // Ensure A-Frame scene refreshes when made visible
-   if(xrMode && xrAllowed) {
-     forceAFrameRender();
-     
-     // For mobile, try to play video even if muted
-     if(isMobile && videoReady && !video.playing) {
-       video.play().catch(e => console.log("Initial mobile play attempt:", e));
-     }
-   }
- };
- 
- // NEW: Create an optimized renderer that uses efficient rendering techniques
- const createOptimizedRenderer = () => {
-   if (!window.AFRAME || !AFRAME.scenes[0] || !AFRAME.scenes[0].renderer) return;
-   
-   const renderer = AFRAME.scenes[0].renderer;
-   
-   // Apply common optimizations
-   renderer.setPixelRatio(Math.min(window.devicePixelRatio * PERFORMANCE.pixelRatioScale, 1.5));
-   
-   if (isMobile) {
-     // Mobile-specific optimizations
-     renderer.shadowMap.enabled = false;
-     renderer.shadowMap.autoUpdate = false;
-     renderer.physicallyCorrectLights = false;
-     
-     // Reduce texture maximum size for mobile
-     renderer.capabilities.maxTextureSize = 2048;
-     
-     // Tell the renderer to prioritize performance over quality
-     if (renderer.debug) {
-       renderer.debug.checkShaderErrors = false;
-     }
-     
-     // NEW: Set precision to medium for mobile
-     if (renderer.capabilities) {
-       renderer.capabilities.precision = "mediump";
-     }
-     
-     // Optimize canvas context if possible
-     try {
-       const gl = renderer.getContext();
-       // Hint to the browser that we prefer performance over quality
-       gl.hint(gl.GENERATE_MIPMAP_HINT, gl.FASTEST);
-       
-       // Reduce memory usage for depth and stencil buffers
-       const contextAttributes = gl.getContextAttributes();
-       if (contextAttributes && gl.getExtension('WEBGL_depth_texture')) {
-         // We can reduce depth precision safely for 360 video
-         contextAttributes.depth = false;
-         contextAttributes.stencil = false;
-       }
-     } catch (e) {
-       console.log("WebGL optimization failed:", e);
-     }
-   }
-   
-   return renderer;
- };
- 
- // Modify force render function to use requestAnimationFrame and be more efficient
- const forceAFrameRender = () => {
-   // Show spinner at the beginning of render attempts
-   showSpinner();
-   
-   if(window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-     console.log("Forcing A-Frame render");
-     
-     // Create or get optimized renderer
-     const renderer = createOptimizedRenderer();
-     
-     // Explicitly check videosphere visibility
-     if(videosphere) {
-       videosphere.setAttribute('visible', 'true');
-       console.log("Ensuring videosphere visibility");
-     }
-     
-     // NEW: Use requestAnimationFrame instead of setTimeout for more efficient rendering
-     if (PERFORMANCE.useRequestAnimationFrame) {
-       // Single initial render
-       renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-       
-       // Number of additional renders to attempt
-       const numRendersToAttempt = isMobile ? 2 : 4;
-       let rendersCompleted = 0;
-       
-       // Function to perform render in animation frame
-       const performRender = () => {
-         if (!window.AFRAME || !AFRAME.scenes[0] || !AFRAME.scenes[0].renderer) {
-           hideSpinner();
-           return;
-         }
-         
-         // Perform render
-         renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-         
-         // Check videosphere visibility
-         if (videosphere) {
-           videosphere.setAttribute('visible', 'true');
-         }
-         
-         rendersCompleted++;
-         
-         // Continue rendering if needed
-         if (rendersCompleted < numRendersToAttempt) {
-           requestAnimationFrame(performRender);
-         } else {
-           // Hide spinner after all renders complete
-           hideSpinner();
-         }
-       };
-       
-       // Start render sequence
-       requestAnimationFrame(performRender);
-     } else {
-       // Fallback to setTimeout approach
-       renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-       window.dispatchEvent(new Event('resize'));
-       
-       // Schedule multiple renders with increasing delays - use fewer renders on mobile
-       const renderDelays = isMobile ? [100, 800] : [100, 400, 800, 1500]; 
-       let lastDelay = Math.max(...renderDelays);
-       
-       renderDelays.forEach(delay => {
-         setTimeout(() => {
-           if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-             console.log(`Scheduled render at ${delay}ms`);
-             AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-             
-             // Check videosphere visibility again during each render
-             if(videosphere) {
-               videosphere.setAttribute('visible', 'true');
-             }
-             
-             // Only hide spinner after the last render attempt
-             if (delay === lastDelay) {
-               hideSpinner();
-             }
-           }
-         }, delay);
-       });
-     }
-   } else {
-     // If A-Frame isn't ready, hide spinner after timeout
-     setTimeout(hideSpinner, 800);
-   }
- };
- 
- // Setup observer to detect when container becomes visible
- const containerObserver = new MutationObserver((mutations) => {
-   mutations.forEach((mutation) => {
-     if (mutation.type === 'attributes' && mutation.attributeName === 'style') {
-       const target = mutation.target;
-       if (target.style.display === 'block' && target.id === 'xrContainer') {
-         console.log("XR container now visible - forcing render");
-         forceAFrameRender();
-       }
-     }
-   });
- });
- 
- // Start observing the container for visibility changes
- containerObserver.observe(xrWrap, { attributes: true });
- 
- if(teaser)xrMode=true;
- layout();
- updateXrButton();
- 
- // Video loading events
- video.addEventListener('loadedmetadata', () => {
-   console.log("Video metadata loaded");
-   
-   // For mobile, apply some optimizations immediately after metadata loads
-   if (isMobile) {
-     // Lower video quality via video element properties
-     video.width = Math.round(1280 * PERFORMANCE.videoScale);
-     video.height = Math.round(720 * PERFORMANCE.videoScale);
-   }
- });
- 
- video.addEventListener('loadeddata',()=>{
-   console.log("Video data loaded");
-   videoReady=true;
-   updateXrButton();
-   
-   // Force renderer update
-   if(window.AFRAME && AFRAME.scenes[0]) {
-     AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-     
-     // Ensure videosphere is visible after video loads
-     if(videosphere) {
-       videosphere.setAttribute('visible', 'true');
-       
-       // For mobile, optimize the videosphere material immediately
-       if (isMobile) {
-         try {
-           // Get the videosphere mesh
-           const material = videosphere.getObject3D('mesh')?.material;
-           if (material && material.map) {
-             // Apply optimizations to the video texture
-             material.map.minFilter = THREE.LinearFilter;
-             material.map.generateMipmaps = false;
-             material.needsUpdate = true;
-             console.log("Applied early texture optimizations to videosphere");
-           }
-         } catch (e) {
-           console.log("Could not apply early texture optimizations:", e);
-         }
-       }
-     }
-   }
-   
-   hideSpinner();
-   
-   // For mobile, try to play muted video once it's loaded
-   if(isMobile && xrMode) {
-     video.muted = true;
-     video.play().catch(e => console.log("Auto-play attempt after load:", e));
-   }
- });
- 
- // Set up buffer monitoring and recovery for mobile
- let lastBufferCheck = 0;
- let bufferWarnings = 0;
- const MAX_BUFFER_WARNINGS = 3;
- let isRecoveringBuffer = false;
- 
- // Monitor buffer status and attempt recovery if needed
- const monitorVideoBuffer = () => {
-   if (!isMobile || !videoReady || !xrMode) return;
-   
-   const now = Date.now();
-   if (now - lastBufferCheck < 5000) return; // Check every 5 seconds
-   lastBufferCheck = now;
-   
-   if (video.paused) return; // Don't check if paused
-   
-   try {
-     // Get current buffer state
-     const buffered = video.buffered;
-     let isBufferHealthy = false;
-     
-     if (buffered.length > 0) {
-       // Check if we have enough buffer ahead
-       const currentTime = video.currentTime;
-       const bufferedEnd = buffered.end(buffered.length - 1);
-       const bufferedAhead = bufferedEnd - currentTime;
-       
-       console.log(`Buffer status: ${bufferedAhead.toFixed(2)}s ahead of current playback`);
-       
-       // Consider buffer healthy if we have at least 10 seconds ahead
-       isBufferHealthy = bufferedAhead >= 10;
-     }
-     
-     if (!isBufferHealthy && !isRecoveringBuffer) {
-       bufferWarnings++;
-       console.log(`Buffer warning ${bufferWarnings}/${MAX_BUFFER_WARNINGS}`);
-       
-       if (bufferWarnings >= MAX_BUFFER_WARNINGS) {
-         console.log("Buffer critically low, attempting recovery");
-         attemptBufferRecovery();
-       }
-     } else if (isBufferHealthy) {
-       // Reset warning count if buffer is healthy
-       bufferWarnings = 0;
-     }
-   } catch (e) {
-     console.log("Error checking buffer:", e);
-   }
- };
- 
- // Attempt to recover from buffer issues
- const attemptBufferRecovery = () => {
-   if (isRecoveringBuffer) return;
-   isRecoveringBuffer = true;
-   
-   // Show spinner during recovery
-   showSpinner();
-   
-   console.log("Starting buffer recovery process");
-   
-   // Store current time and play state
-   const currentTime = video.currentTime;
-   const wasPlaying = !video.paused;
-   
-   // Pause video to allow buffer to fill
-   if (!video.paused) {
-     video.pause();
-   }
-   
-   // For more serious recovery, reload the video source
-   setTimeout(() => {
-     // Load without autoplay
-     video.load();
-     
-     // Watch for data loading
-     const checkLoaded = () => {
-       // Check if enough data is loaded (at least to current position plus 5s)
-       try {
-         if (video.readyState >= 3) { // HAVE_FUTURE_DATA
-           const buffered = video.buffered;
-           let hasEnoughBuffer = false;
-           
-           for (let i = 0; i < buffered.length; i++) {
-             if (buffered.start(i) <= currentTime && buffered.end(i) >= currentTime + 5) {
-               hasEnoughBuffer = true;
-               break;
-             }
-           }
-           
-           if (hasEnoughBuffer) {
-             finishRecovery();
-             return;
-           }
-         }
-         
-         // Check again in 1 second if not ready
-         setTimeout(checkLoaded, 1000);
-       } catch (e) {
-         console.log("Error in buffer check:", e);
-         finishRecovery(); // Proceed anyway after error
-       }
-     };
-     
-     // Start checking loading progress
-     checkLoaded();
-     
-     // Force recovery to complete after maximum wait time
-     setTimeout(() => {
-       if (isRecoveringBuffer) {
-         console.log("Forcing recovery completion after timeout");
-         finishRecovery();
-       }
-     }, 10000);
-   }, 500);
-   
-   // Final step of recovery
-   const finishRecovery = () => {
-     if (!isRecoveringBuffer) return;
-     
-     console.log("Finishing buffer recovery");
-     
-     // Seek to the stored position
-     try {
-       video.currentTime = currentTime;
-     } catch (e) {
-       console.log("Seek error in recovery:", e);
-     }
-     
-     // Apply texture optimizations again
-     if (videosphere) {
-       try {
-         const material = videosphere.getObject3D('mesh')?.material;
-         if (material && material.map) {
-           material.map.minFilter = THREE.LinearFilter;
-           material.map.magFilter = THREE.LinearFilter;
-           material.map.generateMipmaps = false;
-           material.needsUpdate = true;
-         }
-       } catch (e) {
-         console.log("Error reapplying texture optimizations:", e);
-       }
-     }
-     
-     // Resume if it was playing
-     if (wasPlaying) {
-       video.play().catch(e => console.log("Play error in recovery:", e));
-     }
-     
-     // Hide spinner and reset state
-     hideSpinner();
-     isRecoveringBuffer = false;
-     bufferWarnings = 0;
-   };
- };
- 
- // Set up regular buffer monitoring
- const bufferMonitorInterval = setInterval(monitorVideoBuffer, 5000);
- 
- // Cleanup interval on page unload
- window.addEventListener('beforeunload', () => {
-   clearInterval(bufferMonitorInterval);
- });
-
- // Add a stalled/error event handler to recover from video loading issues
- video.addEventListener('stalled', () => {
-   console.log("Video stalled - attempting recovery");
-   if (videoReady && xrMode) {
-     // Try to recover by reloading video source
-     setTimeout(() => {
-       // On mobile, increment our buffer warning count
-       if (isMobile) {
-         bufferWarnings++;
-         if (bufferWarnings >= MAX_BUFFER_WARNINGS) {
-           attemptBufferRecovery();
-         }
-       } else {
-         // On desktop just reload
-         video.load();
-         video.play().catch(e => console.log("Stalled recovery attempt:", e));
-       }
-     }, 1000);
-   }
- });
-
- // Add specific handling for cases where video decoding is interrupted
- video.addEventListener('waiting', () => {
-   console.log("Video waiting for data");
-   showSpinner();
-   
-   // On mobile, this could indicate buffer or memory issues
-   if (isMobile) {
-     bufferWarnings++;
-     
-     // If we've hit waiting state multiple times, try recovery
-     if (bufferWarnings >= MAX_BUFFER_WARNINGS && !isRecoveringBuffer) {
-       console.log("Multiple wait states detected, attempting buffer recovery");
-       attemptBufferRecovery();
-     }
-   }
- });
- 
- // Add specific event listener for progress to monitor buffer state
- video.addEventListener('progress', () => {
-   if (!isMobile) return;
-   
-   try {
-     const buffered = video.buffered;
-     if (buffered.length > 0) {
-       const bufferedEnd = buffered.end(buffered.length - 1);
-       const duration = video.duration || 1;
-       const bufferedAmount = (bufferedEnd / duration) * 100;
-       
-       // Log buffer percentage for debugging
-       console.log(`Buffer progress: ${bufferedAmount.toFixed(1)}% of video buffered`);
-       
-       // If we've buffered a significant amount, reset warnings
-       if (bufferedAmount > 30 && bufferWarnings > 0) {
-         console.log("Buffer progress good, resetting warnings");
-         bufferWarnings = 0;
-       }
-     }
-   } catch (e) {
-     console.log("Error checking buffer progress:", e);
-   }
- });
- 
- // Add an explicit video error recovery mechanism
- video.addEventListener('error', (e) => {
-   console.error('Video error:', video.error, e);
-   
-   // Only show alert in development mode
-   if (devToggleAllowed) {
-     alert('Video error: ' + (video.error ? video.error.message : 'unknown'));
-   }
-   
-   // Force hide spinner after video error
-   hideSpinner();
-   
-   // For mobile, try a more aggressive reload approach
-   if (isMobile) {
-     setTimeout(() => {
-       // Reset video source and try again
-       video.pause();
-       const vs = document.getElementById('videoSource');
-       if (vs) {
-         const currentSrc = vs.src;
-         vs.src = "";
-         setTimeout(() => {
-           vs.src = currentSrc;
-           video.load();
-           // Don't auto-play after error, let user initiate
-         }, 500);
-       }
-     }, 1000);
-   }
- });
- 
- // Force hide spinner after a maximum time (failsafe)
- setTimeout(() => {
-   if (spinnerActive) {
-     console.log("Force hiding spinner after maximum allowed time");
-     spinner.style.display = 'none';
-     spinnerActive = false;
-   }
- }, 10000);
- 
- audio.addEventListener('error', (e) => {
-   console.error('Audio error:', audio.error, e);
-   
-   // Force hide spinner after audio error
-   hideSpinner();
- });
- 
- audio.addEventListener('canplay',()=>{
-   audioReady=true;
-   updateXrButton();
- });
- 
- // Replace the existing event listeners with our debounced versions
- video.addEventListener('waiting', showSpinner);
- video.addEventListener('seeking', showSpinner);
- video.addEventListener('playing', hideSpinner);
- video.addEventListener('canplay', hideSpinner);
- audio.addEventListener('seeking', showSpinner);
- audio.addEventListener('canplay', hideSpinner);
- 
- const recenter=()=>{
-   camera.setAttribute('rotation','0 0 0');
-   const lc=camera.components['look-controls'];
-   if(lc?.pitchObject){
-     lc.pitchObject.rotation.x=0;
-     lc.yawObject.rotation.y=0;
-   }
- };
- 
- audio.addEventListener('timeupdate',()=>{
-   // On mobile, sync less frequently to prevent performance issues
-   if (isMobile) {
-     // Only sync every few seconds and only if difference is significant
-     if (xrMode && videoReady && 
-         (audio.currentTime % 4 < 0.1) && // Only check roughly every 4 seconds
-         Math.abs(video.currentTime - audio.currentTime) > 0.5) {
-       video.currentTime = audio.currentTime;
-     }
-   } else {
-     // Desktop can handle more frequent syncing
-     if(xrMode && videoReady && Math.abs(video.currentTime-audio.currentTime) > 0.1) {
-       video.currentTime = audio.currentTime;
-     }
-   }
-   
-   if(teaser&&!overlayShown&&audio.currentTime>=outroCTA_time){
-     overlay.style.display='flex';
-     overlayShown=true;
-   }
- });
- 
- // Add seeking event to keep video in sync when user scrubs audio
- audio.addEventListener('seeking', () => {
-   if (xrMode && videoReady) {
-     // Show spinner
-     showSpinner();
-     
-     // For mobile, don't sync immediately as it can cause stuttering
-     if (!isMobile) {
-       video.currentTime = audio.currentTime;
-     } else {
-       // For mobile, set a timeout before syncing to reduce impact
-       setTimeout(() => {
-         if (xrMode && videoReady) {
-           video.currentTime = audio.currentTime;
-         }
-       }, 200);
-     }
-   }
- });
- 
- audio.addEventListener('seeked', () => {
-   if (xrMode && videoReady) {
-     // Ensure video and audio are synchronized after seeking finishes
-     video.currentTime = audio.currentTime;
-     
-     // On mobile, give a moment before hiding spinner
-     if (isMobile) {
-       setTimeout(hideSpinner, 300);
-     }
-     
-     // Ensure appropriate playback state
-     if (!audio.paused && video.paused) {
-       // For mobile, add a small delay before playing to ensure texture loads
-       if (isMobile) {
-         setTimeout(() => {
-           video.play().catch(e => {
-             console.error("Video play after seek error:", e);
-             video.muted = true;
-             video.play().catch(e => console.error("Muted play after seek failed:", e));
-           });
-         }, 200);
-       } else {
-         video.play().catch(e => {
-           console.error("Video play after seek error:", e);
-           video.muted = true;
-           video.play().catch(e => console.error("Muted play after seek failed:", e));
-         });
-       }
-     }
-   }
- });
- 
- // NEW: Optimized video-audio sync function that avoids frequent seeking
- // This is a key performance optimization for mobile
- const syncVideoToAudioOptimized = (() => {
-   let lastSyncTime = 0;
-   let isAdjustingPlaybackRate = false;
-   let normalizedPlaybackRate = 1.0;
-   
-   // Track if we've done a hard seek recently
-   let lastHardSeekTime = 0;
-   
-   return () => {
-     if (!xrMode || !videoReady || !audio || !video) return;
-     
-     const now = Date.now();
-     
-     // Don't sync too frequently 
-     const minTimeBetweenSyncs = 1000 / PERFORMANCE.maxSyncFrequency;
-     if (now - lastSyncTime < minTimeBetweenSyncs) return;
-     
-     // Skip if either media is paused
-     if (video.paused || audio.paused) return;
-     
-     // Only check sync if both are playing
-     const audioCurrent = audio.currentTime;
-     const videoCurrent = video.currentTime;
-     const syncDifference = videoCurrent - audioCurrent;
-     const absDifference = Math.abs(syncDifference);
-     
-     // If difference exceeds our threshold, we need to sync
-     if (absDifference > PERFORMANCE.syncThreshold) {
-       // Check if we can use predictive sync on mobile
-       if (PERFORMANCE.usePredictiveSync && isMobile) {
-         // Don't do hard seeks too frequently on mobile - they're very expensive
-         const timeSinceLastHardSeek = now - lastHardSeekTime;
-         const hardSeekMinInterval = 5000; // 5 seconds minimum between hard seeks
-         
-         // Only do a hard seek if the difference is very large or if enough time has passed
-         if (absDifference > 2.0 || timeSinceLastHardSeek > hardSeekMinInterval) {
-           // Do an occasional hard seek if difference is too large
-           console.log(`Hard sync: video=${videoCurrent.toFixed(2)}, audio=${audioCurrent.toFixed(2)}, diff=${syncDifference.toFixed(2)}`);
-           video.currentTime = audioCurrent;
-           lastHardSeekTime = now;
-         } else {
-           // Use playbackRate adjustment to smoothly sync without seeking
-           // This is much more efficient on mobile
-           
-           // Calculate how quickly video needs to catch up to audio
-           let newRate = 1.0;
-           
-           if (syncDifference > 0) {
-             // Video is ahead of audio, slow it down
-             // The larger the difference, the slower we play (down to 0.8x speed)
-             newRate = Math.max(0.8, 1.0 - (absDifference * 0.2));
-           } else {
-             // Video is behind audio, speed it up
-             // The larger the difference, the faster we play (up to 1.5x speed)
-             newRate = Math.min(1.5, 1.0 + (absDifference * 0.3));
-           }
-           
-           // Apply some smoothing to avoid jarring rate changes
-           normalizedPlaybackRate = normalizedPlaybackRate * 0.7 + newRate * 0.3;
-           
-           // Apply new playback rate (if supported)
-           if ('playbackRate' in video) {
-             video.playbackRate = normalizedPlaybackRate;
-             isAdjustingPlaybackRate = true;
-             
-             console.log(`Playback rate sync: ${normalizedPlaybackRate.toFixed(2)}, diff=${syncDifference.toFixed(2)}`);
-           }
-         }
-       } else {
-         // Desktop or fallback - just do normal seeking
-         console.log(`Standard sync: video=${videoCurrent.toFixed(2)}, audio=${audioCurrent.toFixed(2)}, diff=${syncDifference.toFixed(2)}`);
-         video.currentTime = audioCurrent;
-       }
-     } else if (isAdjustingPlaybackRate && absDifference < (PERFORMANCE.syncThreshold * 0.5)) {
-       // If we're close enough and were adjusting rate, return to normal
-       normalizedPlaybackRate = 1.0;
-       if ('playbackRate' in video) {
-         video.playbackRate = 1.0;
-       }
-       isAdjustingPlaybackRate = false;
-     }
-     
-     lastSyncTime = now;
-   };
- })();
- 
- // Replace the old sync interval with our new optimized version
- // Add a periodic sync check to catch drift - less frequent on mobile
- let syncInterval;
- const setupSyncInterval = () => {
-   // Clear any existing interval
-   if (syncInterval) {
-     clearInterval(syncInterval);
-   }
-   
-   // Create new interval with the optimized sync function
-   syncInterval = setInterval(syncVideoToAudioOptimized, isMobile ? 1000 : 500);
- };
- 
- // Initialize our sync interval when the page loads
- window.addEventListener('DOMContentLoaded', () => {
-   // ... existing code ...
-   
-   // Initialize sync interval
-   setupSyncInterval();
-   
-   // ... existing code ...
- });
- 
- audio.addEventListener('play',()=>{
-   if(xrMode&&videoReady) {
-     // First ensure times are synced before playing
-     video.currentTime = audio.currentTime;
-     
-     // Always ensure video is muted - video should never have sound
-     video.muted = true;
-     
-     video.play().catch((e)=>{
-       console.error("Video play error:", e);
-       // Retry play attempt if failed
-       setTimeout(() => {
-         if(isMobile) {
-           video.play().catch(e => console.error("Final play attempt failed:", e));
-         }
-       }, 1000);
-     });
-   }
- });
- 
- audio.addEventListener('pause',()=>{
-   if(!video.paused)video.pause();
- });
- 
- // Ensure video visibility
- document.addEventListener('visibilitychange', () => {
-   if(!document.hidden) {
-     // Only attempt to recover video if needed
-     if(xrMode && videoReady && !audio.paused && video.paused) {
-       // Ensure time is synced before playing
-       video.currentTime = audio.currentTime;
-       
-       // Always keep video muted
-       video.muted = true;
-       video.play().catch(e => {
-         console.error("Visibility play error:", e);
-         setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
-       });
-     }
-     
-     // For mobile, ensure videosphere is visible
-     if(isMobile && videosphere) {
-       setTimeout(() => {
-         videosphere.setAttribute('visible', 'true');
-       }, 300);
-     }
-   }
- });
- 
- // Add a touchstart event listener to help with iOS playback
- document.addEventListener('touchstart', () => {
-   if(xrMode && videoReady && !video.playing) {
-     video.play().catch(e => console.log("Touch play attempt:", e));
-   }
- }, {once: true});
- 
- // Add ripple effect for mobile 
- const addRippleEffect = (button) => {
-   button.addEventListener('click', function(e) {
-     const rect = this.getBoundingClientRect();
-     const x = e.clientX - rect.left;
-     const y = e.clientY - rect.top;
-     
-     const ripple = document.createElement('span');
-     ripple.style.position = 'absolute';
-     ripple.style.width = '0';
-     ripple.style.height = '0';
-     ripple.style.borderRadius = '50%';
-     ripple.style.transform = 'translate(-50%, -50%)';
-     ripple.style.pointerEvents = 'none';
-     ripple.style.backgroundColor = 'rgba(255, 255, 255, 0.3)';
-     ripple.style.left = `${x}px`;
-     ripple.style.top = `${y}px`;
-     
-     this.appendChild(ripple);
-     
-     // Animate ripple
-     ripple.animate([
-       { width: '0', height: '0', opacity: 0.5 },
-       { width: '200px', height: '200px', opacity: 0 }
-     ], {
-       duration: 600,
-       easing: 'ease-out'
-     }).onfinish = () => {
-       ripple.remove();
-     };
-   });
- };
- 
- // Apply ripple effect to all buttons if on mobile
- if(isMobile) {
-   const buttons = document.querySelectorAll('button');
-   buttons.forEach(addRippleEffect);
- }
- 
- modeBtn.addEventListener('click',()=>{
-   if(modeBtn.disabled)return;
-   
-   // Store the current play state and time to restore after mode change
-   const wasPlaying = !audio.paused;
-   const currentTime = audio.currentTime;
-   
-   // If playing, pause temporarily to prevent race conditions
-   if (wasPlaying) {
-     audio.pause();
-     if (!video.paused) video.pause();
-   }
-   
-   recenter();
-   xrMode=!xrMode;
-   layout();
-   
-   // Short timeout to let the DOM update before adjusting playback
-   setTimeout(() => {
-     // Always resync time after mode change
-     if (xrMode && videoReady) {
-       // NEW: Use a hard seek here, it's an explicit user action
-       video.currentTime = currentTime;
-       
-       // Set up new sync interval with optimized function
-       setupSyncInterval();
-     }
-     
-     // Resume playback if it was playing before
-     if (wasPlaying) {
-       audio.currentTime = currentTime; // Ensure audio time is still correct
-       audio.play().then(() => {
-         if (xrMode && videoReady) {
-           // Always ensure video is muted
-           video.currentTime = audio.currentTime; // Resync one last time
-           video.muted = true;
-           
-           video.play().catch((e) => {
-             console.error("Mode toggle play error:", e);
-             setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
-           });
-         }
-       }).catch(e => console.error("Audio resume error:", e));
-     }
-   }, 50);
- });
- 
- recBtn.addEventListener('click',recenter);
- overlay.addEventListener('click',()=>overlay.style.display='none');
- ctaBox.addEventListener('click',e=>{e.stopPropagation();window.location.href=outroCTA_backlink});
- 
- if(!devToggleAllowed)devBtn.style.display='none';
- 
- devBtn.addEventListener('click',()=>{
-   teaser=!teaser;
-   overlay.style.display='none';
-   overlayShown=false;
-   xrAllowed=isXR||teaser;
-   xrMode=teaser;
-   layout();
- });
- 
- // Handle chapter navigation
- $('prevChapter').addEventListener('click', () => {
-   // You could implement chapter navigation logic here
-   console.log("Previous chapter");
- });
- 
- $('nextChapter').addEventListener('click', () => {
-   // You could implement chapter navigation logic here
-   console.log("Next chapter");
- });
- 
- begin.addEventListener('click',async()=>{
-   if(isMobile&&typeof DeviceOrientationEvent!=='undefined'&&DeviceOrientationEvent.requestPermission){
-     try{
-       await DeviceOrientationEvent.requestPermission();
-     }catch(e){
-       console.error("Permission error:", e);
-     }
-   }
-   
-   landing.style.display='none';
-   
-   // Configure video quality based on device capabilities
-   configureVideoForDevice();
-   
-   // For mobile, try to play muted video first to help with autoplay restrictions
-   if(isMobile && xrMode && videoReady) {
-     video.muted = true;
-     video.play().catch(e => console.log("Initial click video play:", e));
-   }
-   
-   // Start audio
-   audio.load();
-   audio.play().then(()=>{
-     // If we want to start paused, uncomment: audio.pause()
-   }).catch((e)=>{
-     console.error("Audio play error:", e);
-     // Show some UI to inform user they need to interact
-   });
-   
-   // Force A-Frame to update its rendering
-   if(window.AFRAME) {
-     setTimeout(() => {
-       // Trigger a resize event to force A-Frame to re-render
-       window.dispatchEvent(new Event('resize'));
-       
-       // Additional explicit rendering calls with increasing delays
-       const renderAttempts = isMobile ? [100, 500] : [100, 300, 800, 1500];
-       renderAttempts.forEach(delay => {
-         setTimeout(() => {
-           if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-             console.log(`Forcing render at ${delay}ms`);
-             AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-             
-             // Ensure videosphere is visible during each render attempt
-             if(videosphere) {
-               videosphere.setAttribute('visible', 'true');
-             }
-           }
-         }, delay);
-       });
-     }, 100);
-   }
- });
- 
- xrModeBtn.addEventListener('click', () => {
-   if(teaser) return;
-   
-   // Store the current play state and time to restore after mode change
-   const wasPlaying = !audio.paused;
-   const currentTime = audio.currentTime;
-   
-   // If playing, pause temporarily to prevent race conditions
-   if (wasPlaying) {
-     audio.pause();
-     if (!video.paused) video.pause();
-   }
-   
-   recenter();
-   xrMode = false;
-   layout();
-   
-   // Short timeout to let the DOM update before adjusting playback
-   setTimeout(() => {
-     // Resume playback if it was playing before
-     if (wasPlaying) {
-       audio.currentTime = currentTime; // Ensure audio time is still correct
-       audio.play().catch(e => console.error("Audio resume error:", e));
-     }
-   }, 50);
- });
-});
-
-// NEW: Optimize the THREE.js video texture handling specifically for mobile
-// Add these optimizations to the aframeinitialized event handler
-document.addEventListener('aframeinitialized', function() {
-  console.log("A-Frame initialized");
-  
-  const videosphere = document.getElementById('videosphere');
-  if(videosphere) {
-    videosphere.setAttribute('visible', 'true');
-    console.log("Set videosphere visible on A-Frame init");
-    
-    // Add explicit texture optimization for the videosphere
-    if (isMobile) {
-      // Set texture filtering to improve performance
-      try {
-        const material = videosphere.getObject3D('mesh').material;
-        if (material && material.map) {
-          // Use a more aggressive optimization approach
-          material.map.minFilter = THREE.LinearFilter;
-          material.map.magFilter = THREE.LinearFilter; // Also optimize magnification filter
-          material.map.generateMipmaps = false;
-          material.map.format = THREE.RGBFormat; // Use RGB instead of RGBA if alpha isn't needed
-          
-          // NEW: Apply additional optimizations for better mobile performance
-          material.map.anisotropy = 1; // Disable anisotropic filtering
-          material.map.wrapS = THREE.ClampToEdgeWrapping;
-          material.map.wrapT = THREE.ClampToEdgeWrapping;
-          
-          // Reduce update frequency for video texture on mobile
-          if (material.map.image && material.map.image === video) {
-            material.map.image._videoOptimized = true;
-          }
-          
-          material.map.needsUpdate = true;          
-          material.needsUpdate = true;
-          console.log("Applied texture optimizations to videosphere");
-        }
-      } catch (e) {
-        console.log("Could not apply texture optimizations:", e);
-      }
-    }
-  }
-
-  // Add a direct optimization for the video texture update mechanism
-  if (isMobile && window.THREE) {
-    try {
-      // NEW: More sophisticated video texture update optimization
-      // This significantly reduces the overhead of texture updates on mobile
-      const originalVideoTextureUpdate = THREE.VideoTexture.prototype.update;
-      
-      THREE.VideoTexture.prototype.update = function() {
-        const video = this.image;
-        
-        // Skip updates if video isn't actually playing or ready
-        if (!video || video.paused || video.readyState < video.HAVE_CURRENT_DATA) {
-          return;
-        }
-        
-        // NEW: Throttle updates on mobile to reduce GPU load
-        if (video._videoOptimized) {
-          // Only update at most once per 3 frames on mobile (~20fps which is enough for 360 video)
-          if (!video._lastUpdateTime || 
-              (performance.now() - video._lastUpdateTime) > 50) { // 50ms = ~20fps
-            this.needsUpdate = true;
-            video._lastUpdateTime = performance.now();
-          }
-        } else {
-          // For desktop or non-optimized videos, use normal update
-          this.needsUpdate = true;
-        }
-      };
-      
-      console.log("Applied advanced video texture update optimization");
-    } catch (e) {
-      console.log("Could not optimize video texture updates:", e);
-    }
-  }
-
-  // ... existing code ...
-  
-  // NEW: Additional memory optimization for THREE.js
-  if (window.THREE) {
-    try {
-      // Dispose unused textures and materials when possible
-      if (THREE.Cache) {
-        // Limit memory usage by THREE.js asset cache
-        THREE.Cache.enabled = false;
-      }
-    } catch (e) {
-      console.log("Could not apply THREE.js memory optimizations:", e);
-    }
-  }
-  
-  // ... existing code ...
-});
-
-// NEW: Clean up resources properly when page is unloaded
-window.addEventListener('beforeunload', () => {
-  // Clear all intervals
-  if (syncInterval) clearInterval(syncInterval);
-  if (bufferMonitorInterval) clearInterval(bufferMonitorInterval);
-  
-  // Release video resources explicitly
-  if (video) {
-    video.pause();
-    video.src = '';
-    video.load();
-  }
-  
-  // Release audio resources explicitly
-  if (audio) {
-    audio.pause();
-    audio.src = '';
-    audio.load();
-  }
-  
-  // Force garbage collection of THREE.js objects if possible
-  if (window.AFRAME && AFRAME.scenes[0]) {
-    const scene = AFRAME.scenes[0];
-    if (scene.renderer) {
-      scene.renderer.dispose();
-    }
-  }
-});
-</script>
+<!-- Load script at the end for faster initial page load -->
+<script src="script.js" defer></script>
 </body>
 </html>

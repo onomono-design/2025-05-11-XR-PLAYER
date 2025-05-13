@@ -1,15 +1,31 @@
 # 360° Audio-Driven XR Player
 
-A web-based player for immersive 360° video experiences with synchronized audio, designed for both desktop and mobile devices.
+A high-performance web-based player for immersive 360° video experiences with synchronized audio, designed for both desktop and mobile devices.
 
 ## Features
 
 - Dual-mode playback: XR (360° video) or Audio-only mode
-- Responsive design for desktop and mobile
+- High-performance video texture updates for smooth playback
+- Responsive design for desktop and mobile devices
 - Chapter navigation system
 - Teaser mode with CTA overlay
 - Seamless audio/video synchronization
 - Mobile device orientation controls
+- Smart recentering functionality on both desktop and mobile
+- Consistent styling with Figtree font from Google Fonts
+- Service worker for optimized media caching
+
+## Performance Optimizations
+
+The player includes several optimizations for smooth playback:
+
+- Efficient texture updates using `requestVideoFrameCallback` where available
+- Predictive synchronization with playback rate adjustments
+- Downscaled video quality on mobile devices
+- WebGL optimizations for mobile performance
+- Throttled texture updates based on device capabilities
+- Service worker for caching media files
+- Buffer monitoring and recovery system
 
 ## Configuration Parameters
 
@@ -29,6 +45,21 @@ The player accepts the following configuration parameters:
 | `outroCTA_backlink` | URL to direct users when clicking the CTA |
 | `devToggleAllowed` | Boolean to show/hide the developer toggle button |
 
+## UI/UX Features
+
+### Recenter Functionality
+
+The "Recenter" button in the top bar helps users reset their view:
+
+- **On Desktop**: Resets the camera orientation to the initial view
+- **On Mobile**: Adjusts the videosphere orientation to match the current device orientation, effectively resetting the user's view to forward
+
+### Responsive Design
+
+- Figtree font for consistent typography across devices
+- Mobile-optimized UI elements with proper touch targets
+- Automatic quality adjustments based on device capabilities
+
 ## Troubleshooting
 
 ### Black Screen Issues
@@ -43,11 +74,25 @@ If you're experiencing a black screen:
 
 ### Audio-Video Sync
 
-The player attempts to keep audio and video in sync by monitoring time differences. If sync issues occur, try:
+The player uses advanced synchronization techniques:
 
-1. Converting the video to a more widely supported format/codec
-2. Reducing video resolution or bitrate
-3. Ensuring both audio and video files can be streamed properly
+1. **Predictive Sync**: For minor drift, the player adjusts video playback rate instead of seeking
+2. **Hard Sync**: For major drift (>1 second), the player performs a hard seek
+3. **Throttled Updates**: Sync operations are limited to prevent performance issues
+
+If sync issues persist, try:
+- Converting the video to a more widely supported format/codec
+- Reducing video resolution or bitrate
+- Ensuring both audio and video files can be streamed properly
+
+### Performance Issues
+
+If experiencing poor performance:
+
+1. **Video Quality**: Use a lower resolution/bitrate video file
+2. **Mobile Optimization**: Ensure the PERFORMANCE settings in script.js are properly tuned
+3. **Browser Support**: Some browsers have better WebGL and video performance than others
+4. **Device Capability**: Some older devices may struggle with 360° video playback
 
 ## Usage Example
 
@@ -56,10 +101,17 @@ The player attempts to keep audio and video in sync by monitoring time differenc
 <iframe src="path/to/index.html" frameborder="0" allowfullscreen></iframe>
 ```
 
-Or configure directly by modifying the script variables in index.html:
+Or configure directly by modifying the script variables in script.js:
 
 ```javascript
 const XR_src = "path/to/your/360video.mp4";
 const audio_src = "path/to/your/audio.mp3";
 // Configure other parameters as needed
-``` 
+```
+
+## Installation
+
+1. Download or clone the repository
+2. Configure the media sources in script.js
+3. Host on a web server that supports HTTPS (required for device orientation)
+4. For mobile usage, ensure your server has proper CORS headers configured 
