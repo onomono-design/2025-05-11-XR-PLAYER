@@ -11,6 +11,22 @@ let videoReady = false;
 let audioReady = false;
 let overlayShown = false;
 
+// Get reference to loading spinner
+const loadingSpinner = $('loadingSpinner');
+
+// Function to control loading spinner visibility
+const updateLoadingSpinnerVisibility = () => {
+  if (videoReady && audioReady) {
+    loadingSpinner.style.display = 'none';
+  } else {
+    // Show spinner only if landing overlay is hidden (i.e., after "Begin" is clicked)
+    const landingOverlay = $('landingOverlay');
+    if (landingOverlay.style.display === 'none') {
+      loadingSpinner.style.display = 'flex';
+    }
+  }
+};
+
 // Update XR button based on state
 const updateXrButton = () => {
   const modeBtn = $('toggleModeButton');
@@ -31,6 +47,12 @@ const layout = () => {
   const xrWrap = $('xrContainer');
   const audioOnly = $('audioOnly');
   const video = $('video360');
+  const overlay = $('ctaOverlay');
+  
+  // Ensure CTA overlay is hidden by default, only show if explicitly triggered
+  if (!teaser || !overlayShown) {
+    overlay.style.display = 'none';
+  }
   
   modeBtn.style.display = xrAllowed && !teaser ? 'inline-flex' : 'none';
   recBtn.style.display = xrMode ? 'inline-block' : 'none';
@@ -63,13 +85,17 @@ const initUI = (isXR) => {
   xrAllowed = isXR || teaser;
   if(teaser) xrMode = true;
   
+  // Always ensure CTA overlay is hidden at initialization
+  const overlay = $('ctaOverlay');
+  overlay.style.display = 'none';
+  
   // Dev toggle button
   const devBtn = $('devToggleButton');
   if(!devToggleAllowed) devBtn.style.display = 'none';
   
   devBtn.addEventListener('click', () => {
     teaser = !teaser;
-    $('ctaOverlay').style.display = 'none';
+    overlay.style.display = 'none';
     overlayShown = false;
     xrAllowed = isXR || teaser;
     xrMode = teaser;
@@ -87,10 +113,15 @@ const initUI = (isXR) => {
     const wasPlaying = !audio.paused;
     const currentTime = audio.currentTime;
     
-    // If playing, pause temporarily to prevent race conditions
+    // If playing, pause video if it's active and we are switching away from XR or to XR.
+    // Audio will continue playing or be started shortly.
     if (wasPlaying) {
-      audio.pause();
-      if (!video.paused) video.pause();
+      // Only pause video if it's currently playing.
+      // If switching to audio-only, video will be hidden by layout().
+      // If switching to XR, video will be synced and played.
+      if (xrMode && !video.paused) { // If currently in XR mode and video is playing
+         // video.pause(); // Pause if leaving XR mode and video was playing.
+      }
     }
     
     recenter();
@@ -110,16 +141,23 @@ const initUI = (isXR) => {
         audio.currentTime = currentTime; // Ensure audio time is still correct
         audio.play().then(() => {
           if (xrMode && videoReady) {
-            // Always ensure video is muted
-            video.currentTime = audio.currentTime; // Resync one last time
+            // Always ensure video is muted and synced
+            video.currentTime = audio.currentTime; 
             video.muted = true;
             
             video.play().catch((e) => {
-              console.error("Mode toggle play error:", e);
-              setTimeout(() => video.play().catch(e => console.error("Retry play failed:", e)), 500);
+              console.error("Mode toggle video play error:", e);
+              // Retry playing video if initial attempt fails
+              setTimeout(() => video.play().catch(e => console.error("Retry video play failed:", e)), 500);
             });
+          } else if (!xrMode && !video.paused) {
+            // If switched to audio-only, ensure video is paused
+            video.pause();
           }
         }).catch(e => console.error("Audio resume error:", e));
+      } else if (xrMode && videoReady) {
+        // If it wasn't playing, but we are in XR mode, sync video time anyway
+        video.currentTime = audio.currentTime;
       }
     }, 50);
   });
@@ -129,7 +167,6 @@ const initUI = (isXR) => {
   recBtn.addEventListener('click', recenter);
   
   // CTA overlay
-  const overlay = $('ctaOverlay');
   const ctaBox = $('ctaBox');
   overlay.addEventListener('click', () => overlay.style.display = 'none');
   ctaBox.addEventListener('click', e => {
@@ -148,9 +185,8 @@ const initUI = (isXR) => {
     const wasPlaying = !audio.paused;
     const currentTime = audio.currentTime;
     
-    // If playing, pause temporarily to prevent race conditions
+    // If playing, pause video. Audio will continue.
     if (wasPlaying) {
-      audio.pause();
       if (!video.paused) video.pause();
     }
     
@@ -160,10 +196,14 @@ const initUI = (isXR) => {
     
     // Short timeout to let the DOM update before adjusting playback
     setTimeout(() => {
-      // Resume playback if it was playing before
+      // Resume audio playback if it was playing before
       if (wasPlaying) {
         audio.currentTime = currentTime; // Ensure audio time is still correct
         audio.play().catch(e => console.error("Audio resume error:", e));
+      }
+      // Ensure video is paused as we are in audio-only mode
+      if (!video.paused) {
+        video.pause();
       }
     }, 50);
   });
@@ -193,6 +233,9 @@ const initUI = (isXR) => {
     
     // Configure video quality based on device capabilities
     configureVideoForDevice();
+    
+    // Show loading spinner now that landing overlay is hidden
+    updateLoadingSpinnerVisibility();
     
     // For mobile, try to play muted video first to help with autoplay restrictions
     const video = $('video360');
@@ -244,9 +287,13 @@ const initUI = (isXR) => {
 
 // CTA overlay handler
 const handleCTAOverlay = (audio) => {
+  // Ensure overlay is initially hidden
+  const overlay = $('ctaOverlay');
+  overlay.style.display = 'none';
+  
   audio.addEventListener('timeupdate', () => {
     if(teaser && !overlayShown && audio.currentTime >= outroCTA_time) {
-      $('ctaOverlay').style.display = 'flex';
+      overlay.style.display = 'flex';
       overlayShown = true;
     }
   });
@@ -256,12 +303,14 @@ const handleCTAOverlay = (audio) => {
 const setVideoReady = (ready) => {
   videoReady = ready;
   updateXrButton();
+  updateLoadingSpinnerVisibility();
 };
 
 // Update audio ready state
 const setAudioReady = (ready) => {
   audioReady = ready;
   updateXrButton();
+  updateLoadingSpinnerVisibility();
 };
 
 // Get current XR mode state

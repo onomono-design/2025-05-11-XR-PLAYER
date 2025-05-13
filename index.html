@@ -11,7 +11,7 @@
   window.addEventListener('DOMContentLoaded', function() {
     var overlay = document.getElementById('ctaOverlay');
     if (overlay) {
-      overlay.style.display = 'none';
+      overlay.style.setProperty('display', 'none', 'important');
       console.log("CTA overlay hidden at startup");
     }
     
@@ -193,7 +193,7 @@
     <button id="nextChapter" class="nav-btn" aria-label="Next Chapter">&raquo;</button>
   </div>
 </div>
-<div id="ctaOverlay" class="overlay" style="display: none !important;">
+<div id="ctaOverlay" class="overlay initially-hidden" style="display: none !important;">
   <div class="cta-box" id="ctaBox">
     <div class="cta-logo"></div>
     <div class="cta-text">Take the full tour here</div>
@@ -209,7 +209,14 @@
 // Ensure the page starts in the correct state
 document.addEventListener('DOMContentLoaded', function() {
   // Make sure CTA overlay is hidden
-  document.getElementById('ctaOverlay').style.display = 'none';
+  var overlay = document.getElementById('ctaOverlay');
+  if (overlay) {
+    overlay.style.setProperty('display', 'none', 'important');
+    console.log("CTA overlay hidden at startup");
+    
+    // Also add a class to ensure it's hidden via CSS
+    overlay.classList.add('initially-hidden');
+  }
   
   // Ensure inertia on camera controls
   const cameraEntity = document.getElementById('cameraEntity');

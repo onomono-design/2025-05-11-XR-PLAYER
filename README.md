@@ -4,7 +4,7 @@ A high-performance web-based player for immersive 360° video experiences with s
 
 ## Features
 
-- Dual-mode playback: XR (360° video) or Audio-only mode
+- Seamless dual-mode playback: XR (360° video) or Audio-only mode with continuous audio.
 - High-performance video texture updates for smooth playback
 - Responsive design for desktop and mobile devices
 - Chapter navigation system
@@ -47,6 +47,11 @@ The player accepts the following configuration parameters:
 
 ## UI/UX Features
 
+### Loading Experience
+
+- **Initial Screen**: The player presents an initial landing screen with a "Begin Tour" button to ensure user interaction before media loading, crucial for autoplay policies and permissions on mobile devices.
+- **Modal Loading Indicator**: After the user initiates the experience, a modal overlay with a spinner is displayed, indicating that the audio and video content are actively loading. This overlay disappears once the media is ready for playback.
+
 ### Recenter Functionality
 
 The "Recenter" button in the top bar helps users reset their view:
@@ -59,6 +64,10 @@ The "Recenter" button in the top bar helps users reset their view:
 - Figtree font for consistent typography across devices
 - Mobile-optimized UI elements with proper touch targets
 - Automatic quality adjustments based on device capabilities
+
+### Mode Switching
+
+- Toggling between XR mode and Audio-only mode is designed to be seamless. The audio playback continues without interruption, providing a smooth transition for the user.
 
 ## Troubleshooting
 

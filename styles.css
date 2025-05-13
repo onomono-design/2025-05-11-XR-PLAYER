@@ -287,6 +287,14 @@ html, body {
 /* CTA overlay */
 #ctaOverlay {
   cursor: pointer;
+  display: none !important;
+}
+
+/* Extra class for initial hiding */
+.initially-hidden {
+  display: none !important;
+  visibility: hidden !important;
+  opacity: 0 !important;
 }
 
 .cta-box {

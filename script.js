@@ -1,16 +1,35 @@
 // Configuration constants
-const XR_src="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4";
+// Import config values to ensure they're properly used
+import { 
+  XR_src as ConfigXR_src, 
+  audio_src as ConfigAudio_src,
+  thumbnail_src as ConfigThumbnail_src,
+  isXR as ConfigIsXR, 
+  isTeaser as ConfigIsTeaser,
+  outroCTA_time as ConfigOutroCTA_time,
+  outroCTA_backlink as ConfigOutroCTA_backlink,
+  devToggleAllowed as ConfigDevToggleAllowed,
+  isMobile as ConfigIsMobile,
+  PERFORMANCE as ConfigPERFORMANCE
+} from './js/config.js';
+
+// Use imported values or fallback to local
+const XR_src= ConfigXR_src || "https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4";
 // ENHANCEMENT: Add fallback video sources for better compatibility
 const XR_src_fallback_HLS="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.m3u8";
 const XR_src_fallback_WEBM="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.webm";
 const XR_src_low="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-ultralow.mp4";
-const audio_src="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.mp3";
+const audio_src= ConfigAudio_src || "https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.mp3";
 // ENHANCEMENT: Add fallback audio source
 const audio_src_fallback="https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.ogg";
-const thumbnail_src="https://placehold.co/1024x1024/1E1E1E/FFFFFF?text=Album+Art";
+const thumbnail_src= ConfigThumbnail_src || "https://placehold.co/1024x1024/1E1E1E/FFFFFF?text=Album+Art";
 const chapterName="Look Tin Eli",chapterOrder=2,tourName="Chinatown Tour";
-const isXR=true,isTeaser=false,outroCTA_time=20,outroCTA_backlink="https://example.com/full-tour";
-const devToggleAllowed=true,isMobile=matchMedia('(pointer:coarse)').matches;
+const isXR= ConfigIsXR !== undefined ? ConfigIsXR : true;
+const isTeaser= ConfigIsTeaser !== undefined ? ConfigIsTeaser : false;
+const outroCTA_time= ConfigOutroCTA_time || 20;
+const outroCTA_backlink= ConfigOutroCTA_backlink || "https://example.com/full-tour";
+const devToggleAllowed= ConfigDevToggleAllowed !== undefined ? ConfigDevToggleAllowed : true;
+const isMobile= ConfigIsMobile !== undefined ? ConfigIsMobile : matchMedia('(pointer:coarse)').matches;
 
 // ENHANCEMENT: Device capability detection
 const deviceCapabilities = {
@@ -395,8 +414,8 @@ window.addEventListener('DOMContentLoaded',()=>{
  let audioReady = false;
  let overlayShown = false;
  
- // Ensure CTA overlay is hidden at startup
- overlay.style.display = 'none';
+ // Ensure CTA overlay is hidden at startup with !important to override any CSS
+ overlay.style.setProperty('display', 'none', 'important');
  
  // ENHANCEMENT: Create error container
  const errorContainer = document.createElement('div');
@@ -1229,14 +1248,20 @@ window.addEventListener('DOMContentLoaded',()=>{
  });
  
  recBtn.addEventListener('click',recenter);
- overlay.addEventListener('click',()=>overlay.style.display='none');
- ctaBox.addEventListener('click',e=>{e.stopPropagation();window.location.href=outroCTA_backlink});
+ overlay.addEventListener('click',()=> {
+   overlay.style.setProperty('display', 'none', 'important');
+   overlayShown = false;
+ });
+ ctaBox.addEventListener('click',e=>{
+   e.stopPropagation();
+   window.location.href=outroCTA_backlink
+ });
  
  if(!devToggleAllowed)devBtn.style.display='none';
  
  devBtn.addEventListener('click',()=>{
    teaser=!teaser;
-   overlay.style.display='none';
+   overlay.style.setProperty('display', 'none', 'important');
    overlayShown=false;
    xrAllowed=isXR||teaser;
    
