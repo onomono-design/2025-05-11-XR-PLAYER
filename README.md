@@ -32,11 +32,11 @@ The player includes several optimizations for smooth playback:
 The player automatically detects the device type and provides distinct experiences:
 
 ### Desktop Controls
-- **Initial View**: Camera starts with rotation (0, -90, 0), providing a forward-facing initial view
+- **Initial View**: Camera starts with rotation (0, 0, 0), providing a forward-facing initial view
 - **Navigation Method**: Mouse-based look controls for both panning (horizontal) and tilting (vertical)
 - **Interaction**: Click and drag in any direction to look around the 360° environment
 - **Performance**: Higher resolution video playback and rendering quality
-- **Recentering**: When the "Recenter" button is clicked, the camera rotation resets to the original (0, -90, 0) setting, returning to the initial view direction
+- **Recentering**: When the "Recenter" button is clicked, the camera rotation resets to the original (0, 0, 0) setting, returning to the initial view direction regardless of current orientation
 - **Input Method**: No device orientation data is used, allowing for traditional mouse/trackpad control
 
 ### Mobile Controls
@@ -46,17 +46,23 @@ The player automatically detects the device type and provides distinct experienc
 - **Interaction**: Move the device physically to look around, or swipe horizontally to pan
 - **Performance**: Automatically optimized video resolution and rendering settings for mobile devices
 - **Permissions**: On iOS, the player requests device motion permissions during initialization
-- **Recentering**: When the "Recenter" button is clicked, the videosphere rotation is adjusted to align with the user's current forward direction, making wherever the user is currently facing the "front" view
+- **Recentering**: When the "Recenter" button is clicked, the current view direction is set as the new "forward" (0,0,0) reference point. The player records the user's current orientation and resets all tracking to make this the new center.
+- **Spatial Memory**: The recentering function creates a more natural experience by allowing users to establish their own reference points within the 360° environment based on their physical position and orientation.
 - **Fallback**: If device orientation is not available or permission is denied, falls back to full touch-based controls (both panning and tilting)
 
 ### Technical Implementation
 - The detection between desktop and mobile is handled by matching against pointer coarse media queries
-- Initial camera rotation on desktop is set to (0, -90, 0) to provide a consistent starting view
+- Initial camera and videosphere rotations are set to (0, 0, 0) to provide a consistent starting view
 - Mobile devices use A-Frame's `magicWindowTrackingEnabled` for device orientation
 - On mobile with orientation enabled, touch controls are modified to primarily affect horizontal movement by setting a near-zero `verticalDragFactor`
 - The recenter function works differently based on device:
-  - Desktop: Resets camera rotation to initial values
-  - Mobile: Adjusts videosphere rotation to match current camera direction
+  - **Desktop**: Resets camera rotation to initial values (0, 0, 0), returning to the predefined starting view
+  - **Mobile**: Creates a new reference point by:
+    1. Capturing the user's current view direction (camera rotation)
+    2. Setting the videosphere rotation to compensate for this orientation
+    3. Resetting the camera's rotation to (0, 0, 0)
+    4. Updating all internal reference points to consider this the new "forward" direction
+    5. This makes wherever the user is currently facing the new "front" view
 
 ## Device Orientation Permissions
 
@@ -120,15 +126,29 @@ The player accepts the following configuration parameters:
 
 The "Recenter" button in the top bar helps users reset their view, with behavior that adapts to the device type:
 
-- **On Desktop**: Resets the camera rotation to its initial values (0, -90, 0), returning to the starting view regardless of current orientation.
-- **On Mobile**: Adjusts the videosphere rotation to match the current device orientation, effectively making the direction the user is currently facing the new "front" direction. This is particularly useful when physical device rotation has left the user disoriented.
+- **On Desktop**: Resets the camera rotation to its initial values (0, 0, 0), returning to the starting view regardless of current orientation.
+- **On Mobile**: Establishes a new reference coordinate system based on the user's current orientation:
+  - Captures the current device orientation and view direction
+  - Makes the direction the user is currently facing the new "front" (0,0,0) direction
+  - Resets all internal tracking to consider this the new forward reference point
+  - This is particularly useful when:
+    - The user has physically rotated and needs to re-establish what "forward" means
+    - The user wants to create a more comfortable viewing position
+    - Device orientation tracking has drifted or become misaligned
+    - The user wants to avoid uncomfortable physical positions while exploring the 360° content
 
 #### Implementation Details
 
 The recenter functionality is implemented through the `camera-recenter` A-Frame component and includes:
 
 - **Initialization Safeguards**: The component includes delayed initialization and multiple fallback mechanisms to ensure it works even if the A-Frame scene isn't fully loaded.
-- **Device Detection**: Automatically uses different recentering approaches based on device type.
+- **Device Detection**: Automatically uses different recentering approaches based on device type:
+  - Desktop: Simple rotation reset to predefined values
+  - Mobile: Dynamic reference point creation based on current orientation
+- **Orientation Handling**:
+  - On mobile, the component captures the current world rotation
+  - It then resets the camera to (0,0,0) and adjusts the videosphere to compensate
+  - This maintains the visual scene but establishes a new coordinate system
 - **Fallback Methods**: If the component isn't available, falls back to basic camera rotation reset.
 - **Event-Based Architecture**: Uses a custom 'recenter' event for better compatibility with A-Frame's entity-component system.
 
@@ -156,9 +176,10 @@ The recenter functionality is implemented through the `camera-recenter` A-Frame 
 
 #### On Desktop
 1. **Mouse Controls**: The desktop version relies exclusively on mouse or trackpad movement for both panning and tilting
-2. **Initial View**: The starting view should be facing forward with camera rotation (0, -90, 0)
-3. **Broken Controls**: If mouse controls aren't working, try refreshing the page
-4. **Browser Compatibility**: Ensure you're using a modern browser that supports WebGL and A-Frame
+2. **Initial View**: The starting view maintains a consistent forward direction with camera rotation (0, 0, 0)
+3. **Recentering**: On desktop, the recenter button always returns to the same predefined "home" orientation
+4. **Broken Controls**: If mouse controls aren't working, try refreshing the page
+5. **Browser Compatibility**: Ensure you're using a modern browser that supports WebGL and A-Frame
 
 ### Black Screen Issues
 
@@ -169,6 +190,20 @@ If you're experiencing a black screen:
 3. **CORS Issues**: Make sure your video and audio sources allow cross-origin requests
 4. **Mobile Device**: On iOS, user interaction is required before video playback
 5. **Video Loading**: Check that the video file is properly loading and not too large
+
+### Mobile Recentering and Orientation
+
+If you're having issues with orientation or recentering on mobile:
+
+1. **Recentering Behavior**: When you press the "Recenter" button on mobile, your current view direction becomes the new "forward" (0,0,0)
+2. **Orientation Drift**: If the view seems to drift or is misaligned, press the "Recenter" button while facing the direction you want to establish as "forward"
+3. **Physical Comfort**: If you find yourself in an awkward physical position to view content, recenter while facing a more comfortable direction
+4. **Direction Reference**: The recenter function remembers your current orientation as the new reference point, so all future device movements will be relative to this position
+5. **Troubleshooting**: If recentering doesn't seem to work correctly:
+   - Ensure device orientation permission is granted (iOS)
+   - Verify you're in a stable position when pressing recenter
+   - Try reloading the page to reset all reference points
+   - On some devices, moving too quickly after recentering can cause drift
 
 ### Audio-Video Sync
 

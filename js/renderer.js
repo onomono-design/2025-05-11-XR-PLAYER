@@ -91,8 +91,14 @@ const forceAFrameRender = () => {
     
     // Explicitly check videosphere visibility
     if(videosphere) {
-      videosphere.setAttribute('visible', 'true');
-      console.log("Ensuring videosphere visibility");
+      try {
+        // Ensure the videosphere has the correct default rotation
+        const currentRotation = videosphere.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+        videosphere.setAttribute('visible', 'true');
+        console.log("Ensuring videosphere visibility and rotation:", currentRotation);
+      } catch (e) {
+        console.error("Error setting videosphere visibility:", e);
+      }
     }
     
     // Use requestAnimationFrame instead of setTimeout for more efficient rendering
@@ -117,7 +123,14 @@ const forceAFrameRender = () => {
         
         // Check videosphere visibility
         if (videosphere) {
-          videosphere.setAttribute('visible', 'true');
+          try {
+            // Ensure the videosphere has the correct default rotation
+            const currentRotation = videosphere.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+            videosphere.setAttribute('visible', 'true');
+            console.log("Ensuring videosphere visibility and rotation:", currentRotation);
+          } catch (e) {
+            console.error("Error setting videosphere visibility:", e);
+          }
         }
         
         rendersCompleted++;
@@ -151,7 +164,14 @@ const forceAFrameRender = () => {
             
             // Check videosphere visibility again during each render
             if(videosphere) {
-              videosphere.setAttribute('visible', 'true');
+              try {
+                // Ensure the videosphere has the correct default rotation
+                const currentRotation = videosphere.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+                videosphere.setAttribute('visible', 'true');
+                console.log("Ensuring videosphere visibility and rotation:", currentRotation);
+              } catch (e) {
+                console.error("Error setting videosphere visibility:", e);
+              }
             }
             
             // Only hide spinner after the last render attempt
@@ -278,7 +298,7 @@ const recenter = () => {
   const camera = $('cameraEntity');
   if(!camera || !window.AFRAME) return;
   camera.setAttribute('position', {x: 0, y: 1.6, z: 0});
-  camera.setAttribute('rotation', {x: 0, y: -90, z: 0});
+  camera.setAttribute('rotation', {x: 0, y: 0, z: 0});
   
   // Force a render update
   if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {

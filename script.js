@@ -408,7 +408,7 @@ AFRAME.registerComponent('camera-recenter', {
     }
     
     // Store initial target rotation for reference
-    this.targetRotation = { x: 0, y: -90, z: 0 }; // Initial centered view
+    this.targetRotation = { x: 0, y: 0, z: 0 }; // Initial centered view
     this.deviceOrientationOffset = { alpha: 0, beta: 0, gamma: 0 };
     this.lastDeviceOrientation = null;
     
@@ -459,13 +459,14 @@ AFRAME.registerComponent('camera-recenter', {
 
 
       if (isMobile) {
-        // MOBILE RECENTER LOGIC: Adjust videosphere rotation
+        // MOBILE RECENTER LOGIC: Make current orientation the new reference point (0 0 0)
         const videosphereEl = document.querySelector('#videosphere');
         if (!videosphereEl) {
           console.error('Videosphere entity with id="videosphere" not found for mobile recenter.');
           return false;
         }
 
+        // Get current camera world orientation
         const cameraObject3D = this.cameraEl.object3D;
         const tempQuaternion = new THREE.Quaternion();
         cameraObject3D.getWorldQuaternion(tempQuaternion);
@@ -475,17 +476,10 @@ AFRAME.registerComponent('camera-recenter', {
 
         const cameraWorldYawDeg = THREE.MathUtils.radToDeg(cameraWorldEulerYXZ.y);
         
-        const vsCurrentRotation = videosphereEl.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
-        
         console.log('Mobile Recenter: Current camera world yaw (degrees):', cameraWorldYawDeg);
-        console.log('Mobile Recenter: Setting videosphere Y rotation to match camera world yaw.');
         
-        videosphereEl.setAttribute('rotation', {
-          x: vsCurrentRotation.x,
-          y: cameraWorldYawDeg,
-          z: vsCurrentRotation.z
-        });
-
+        // Instead of just adjusting videosphere, we're resetting everything
+        // Step 1: Reset the look-controls rotation objects to zero
         if (lookControls.yawObject) {
           lookControls.yawObject.rotation.y = 0; 
         }
@@ -493,6 +487,26 @@ AFRAME.registerComponent('camera-recenter', {
           lookControls.pitchObject.rotation.x = 0;
         }
         
+        // Step 2: Set videosphere rotation to compensate for the camera's current world rotation
+        // This makes the current view direction the new "front" (0,0,0)
+        videosphereEl.setAttribute('rotation', {
+          x: 0,
+          y: cameraWorldYawDeg,
+          z: 0
+        });
+        
+        // Step 3: Reset camera's local rotation to be the new reference point
+        this.cameraEl.setAttribute('rotation', {x: 0, y: 0, z: 0});
+        
+        // Step 4: Update the stored reference rotations for future recenters
+        if (window.localInitialCameraRotation) {
+          window.localInitialCameraRotation = {x: 0, y: 0, z: 0};
+        }
+        if (window.localInitialVideosphereRotation) {
+          window.localInitialVideosphereRotation = {x: 0, y: cameraWorldYawDeg, z: 0};
+        }
+        
+        // Step 5: Reset orientation tracking state if needed
         if (typeof lookControls.updateOrientation === 'function') {
           lookControls.updateOrientation();
         }
@@ -500,14 +514,13 @@ AFRAME.registerComponent('camera-recenter', {
             lookControls.deviceOrientationMagicWindowDelta.set(0,0,0);
             console.log('Mobile Recenter: Reset deviceOrientationMagicWindowDelta.');
         }
-        console.log('Mobile Recenter: Videosphere rotation adjusted and look-controls touch input reset.');
+        
+        console.log('Mobile Recenter: Made current direction the new home orientation (0,0,0)');
 
       } else {
-        // DESKTOP RECENTER LOGIC: Reset camera to fixed orientation (0, -90, 0)
-        // NOTE: The README states desktop camera initial rotation (0, -90, 0).
-        // The existing `script.js` uses `initialCameraRotation = {x: 0, y: 90, z: 0}` for desktop.
-        // We will use the README's (0, -90, 0) for the new component.
-        const desktopTargetRotationDeg = { x: 0, y: -90, z: 0 };
+        // DESKTOP RECENTER LOGIC: Reset camera to fixed orientation (0, 0, 0)
+        // NOTE: Updated to use (0, 0, 0) for matching videosphere orientation
+        const desktopTargetRotationDeg = { x: 0, y: 0, z: 0 };
 
         if (lookControls.yawObject && lookControls.pitchObject) {
           lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(desktopTargetRotationDeg.x);
@@ -585,12 +598,12 @@ window.recenterCamera = function() {
     // Fallback to a basic camera reset
     try {
       console.log('Attempting basic camera reset as fallback');
-      cameraEl.setAttribute('rotation', {x: 0, y: -90, z: 0});
+      cameraEl.setAttribute('rotation', {x: 0, y: 0, z: 0});
       
       // Try to update look-controls if available
       if (cameraEl.components && cameraEl.components['look-controls']) {
         const lookControls = cameraEl.components['look-controls'];
-        if (lookControls.yawObject) lookControls.yawObject.rotation.y = THREE.MathUtils.degToRad(-90);
+        if (lookControls.yawObject) lookControls.yawObject.rotation.y = THREE.MathUtils.degToRad(0);
         if (lookControls.pitchObject) lookControls.pitchObject.rotation.x = 0;
       }
       
@@ -671,8 +684,8 @@ const configureVideoForDevice = () => {
 };
 
 // Store initial camera and videosphere orientations for reference
-let initialCameraRotation = {x: 0, y: 90, z: 0};
-let initialVideosphereRotation = {x: 0, y: -90, z: 0};
+let initialCameraRotation = {x: 0, y: 0, z: 0};
+let initialVideosphereRotation = {x: 0, y: 0, z: 0};
 
 // Initialize desktop-specific camera controls
 function setupDesktopCameraControls() {
@@ -763,8 +776,8 @@ window.addEventListener('DOMContentLoaded',()=>{
  let overlayShown = false;
  
  // Local reference to initial rotation values
- let localInitialCameraRotation = {x: 0, y: -90, z: 0}; // UPDATED for consistency with README
- let localInitialVideosphereRotation = {x: 0, y: -90, z: 0};
+ let localInitialCameraRotation = {x: 0, y: 0, z: 0}; // Update to match videosphere orientation
+ let localInitialVideosphereRotation = {x: 0, y: 0, z: 0};
  
  // Ensure CTA overlay is hidden at startup with !important to override any CSS
  overlay.style.setProperty('display', 'none', 'important');
@@ -1278,7 +1291,7 @@ window.addEventListener('DOMContentLoaded',()=>{
      // Store initial camera rotation for reference
      localInitialCameraRotation = {
        x: 0,
-       y: 90, // Initial forward view on startup
+       y: 0, // Initial forward view on startup
        z: 0
      };
      
@@ -1297,7 +1310,7 @@ window.addEventListener('DOMContentLoaded',()=>{
      
      // Store initial videosphere rotation
      if (videosphere) {
-       localInitialVideosphereRotation = videosphere.getAttribute('rotation') || {x: 0, y: -90, z: 0};
+       localInitialVideosphereRotation = videosphere.getAttribute('rotation') || {x: 0, y: 0, z: 0};
        initialVideosphereRotation = { ...localInitialVideosphereRotation };
        console.log("Initial videosphere rotation:", localInitialVideosphereRotation);
      }
@@ -1558,14 +1571,22 @@ window.addEventListener('DOMContentLoaded',()=>{
          console.log("Using fallback recenter method for mobile");
          const currentY = camera.getAttribute('rotation').y || 0;
          
-         // Apply videosphere adjustment based on current camera rotation
+         // Updated approach: Set current direction as the new "front" view (0,0,0)
+         // Step 1: Set videosphere rotation to current camera Y rotation
          videosphere.setAttribute('rotation', {
-           x: localInitialVideosphereRotation.x,
-           y: localInitialVideosphereRotation.y - currentY, 
-           z: localInitialVideosphereRotation.z
+           x: 0,
+           y: currentY,
+           z: 0
          });
          
-         console.log(`Recentered on mobile (fallback): camera Y = ${currentY}, adjusted videosphere Y = ${localInitialVideosphereRotation.y - currentY}`);
+         // Step 2: Reset camera rotation to 0,0,0
+         camera.setAttribute('rotation', {x: 0, y: 0, z: 0});
+         
+         // Step 3: Update stored reference points
+         localInitialCameraRotation = {x: 0, y: 0, z: 0};
+         localInitialVideosphereRotation = {x: 0, y: currentY, z: 0};
+         
+         console.log(`Recentered on mobile: Made current view (camera Y = ${currentY}) the new front direction (0,0,0)`);
          
          // Force immediate render
          forceAFrameRender();
@@ -1600,17 +1621,24 @@ window.addEventListener('DOMContentLoaded',()=>{
              // Get current camera Y rotation
              const currentY = camera.getAttribute('rotation').y || 0;
              
-             // Apply adjustment to videosphere to align with user's current heading
-             // This makes the current view direction the "front" view
+             // Updated approach: Set current direction as the new "front" view (0,0,0)
+             // Step 1: Set videosphere rotation to current camera Y rotation
              videosphere.setAttribute('rotation', {
-               x: localInitialVideosphereRotation.x,
-               y: localInitialVideosphereRotation.y - currentY, 
-               z: localInitialVideosphereRotation.z
+               x: 0,
+               y: currentY,
+               z: 0
              });
              
-             console.log(`Recentered on mobile: camera Y = ${currentY}, adjusted videosphere Y = ${localInitialVideosphereRotation.y - currentY}`);
+             // Step 2: Reset camera rotation to 0,0,0
+             camera.setAttribute('rotation', {x: 0, y: 0, z: 0});
              
-             // Force immediate render to show changes
+             // Step 3: Update stored reference points
+             localInitialCameraRotation = {x: 0, y: 0, z: 0};
+             localInitialVideosphereRotation = {x: 0, y: currentY, z: 0};
+             
+             console.log(`Recentered on mobile: Made current view (camera Y = ${currentY}) the new front direction (0,0,0)`);
+             
+             // Force immediate render
              forceAFrameRender();
            } else {
              // Use camera rotation method as fallback if orientation data is null
@@ -1633,7 +1661,7 @@ window.addEventListener('DOMContentLoaded',()=>{
      camera.setAttribute('position', {x: 0, y: 1.6, z: 0});
      camera.setAttribute('rotation', {
        x: localInitialCameraRotation.x,
-       y: localInitialCameraRotation.y, // Should be 90 degrees to face forward
+       y: localInitialCameraRotation.y, // Should be 0 degrees to match videosphere
        z: localInitialCameraRotation.z
      });
      
