@@ -123,6 +123,15 @@ The "Recenter" button in the top bar helps users reset their view, with behavior
 - **On Desktop**: Resets the camera rotation to its initial values (0, -90, 0), returning to the starting view regardless of current orientation.
 - **On Mobile**: Adjusts the videosphere rotation to match the current device orientation, effectively making the direction the user is currently facing the new "front" direction. This is particularly useful when physical device rotation has left the user disoriented.
 
+#### Implementation Details
+
+The recenter functionality is implemented through the `camera-recenter` A-Frame component and includes:
+
+- **Initialization Safeguards**: The component includes delayed initialization and multiple fallback mechanisms to ensure it works even if the A-Frame scene isn't fully loaded.
+- **Device Detection**: Automatically uses different recentering approaches based on device type.
+- **Fallback Methods**: If the component isn't available, falls back to basic camera rotation reset.
+- **Event-Based Architecture**: Uses a custom 'recenter' event for better compatibility with A-Frame's entity-component system.
+
 ### Responsive Design
 
 - Figtree font for consistent typography across devices

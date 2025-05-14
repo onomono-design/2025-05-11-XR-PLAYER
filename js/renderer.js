@@ -259,10 +259,31 @@ const optimizeVideoTextures = () => {
 
 // Function to recenter the camera
 const recenter = () => {
+  // First try to use the A-Frame component approach
+  if (typeof window.recenterCamera === 'function') {
+    console.log("renderer.js recenter: using window.recenterCamera");
+    window.recenterCamera();
+    return;
+  }
+  
+  // Fall back to window.recenterCameraFromAFrame
+  if (typeof window.recenterCameraFromAFrame === 'function') {
+    console.log("renderer.js recenter: using window.recenterCameraFromAFrame");
+    window.recenterCameraFromAFrame();
+    return;
+  }
+  
+  // Last resort fallback - basic position/rotation reset
+  console.log("renderer.js recenter: using basic fallback method");
   const camera = $('cameraEntity');
   if(!camera || !window.AFRAME) return;
   camera.setAttribute('position', {x: 0, y: 1.6, z: 0});
-  camera.setAttribute('rotation', {x: 0, y: 0, z: 0});
+  camera.setAttribute('rotation', {x: 0, y: -90, z: 0});
+  
+  // Force a render update
+  if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+    AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+  }
 };
 
 // PERFORMANCE IMPROVEMENT: Simplified observer
