@@ -7,6 +7,9 @@
     "start": "npx http-server -c-1 -o",
     "dev": "npx http-server -c-1 -o"
   },
+  "dependencies": {
+    "http-server": "^14.1.1"
+  },
   "keywords": [
     "360",
     "video",

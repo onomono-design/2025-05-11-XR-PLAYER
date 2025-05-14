@@ -1,4 +1,6 @@
 // Service worker for 360° video player
+// Import media URLs from config
+self.importScripts('./js/config.js');
 
 const CACHE_NAME = 'vr-media-cache-v2'; // Incremented version
 const VIDEO_CACHE_NAME = 'vr-video-cache-v2';
@@ -9,21 +11,15 @@ const CACHE_MAX_AGE = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
 
 // Assets to cache on install
 const CACHED_ASSETS = [
-  '/',
-  '/index.html',
-  '/script.js',
-  '/styles.css'
+  './',
+  './index.html',
+  './script.js',
+  './styles.css',
+  './js/config.js'
 ];
 
-// Media URLs to cache - include fallback formats
-const MEDIA_URLS = [
-  'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4',
-  'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.m3u8',
-  'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.webm',
-  'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-ultralow.mp4',
-  'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.mp3',
-  'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.ogg'
-];
+// Media URLs will be imported from config
+let MEDIA_URLS = [];
 
 // ENHANCEMENT: Enhanced fetch with retry logic
 const fetchWithRetry = async (request, retries = 3, delay = 500) => {
@@ -51,6 +47,30 @@ const fetchWithRetry = async (request, retries = 3, delay = 500) => {
 self.addEventListener('install', event => {
   console.log('Service Worker installing');
   
+  // Try to get media URLs from config
+  try {
+    if (self.MEDIA_URLS && Array.isArray(self.MEDIA_URLS)) {
+      MEDIA_URLS = self.MEDIA_URLS;
+      console.log('Media URLs imported from config:', MEDIA_URLS.length);
+    } else {
+      console.warn('Media URLs not found in config or not an array');
+    }
+  } catch (error) {
+    console.error('Error importing media URLs from config:', error);
+  }
+  
+  // Fallback if import fails
+  if (MEDIA_URLS.length === 0) {
+    MEDIA_URLS = [
+      'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.mp4',
+      'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.m3u8',
+      'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-low.webm',
+      'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-04-10-JAPANTOWN-XR/2025-04-21-CHINATOWN-XR-UPDATE/2025-04-21-CHINATOWN-XR-2b-ultralow.mp4',
+      'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.mp3',
+      'https://cmm-cloud-2.s3.us-west-1.amazonaws.com/WALKING+TOURS/2025-03-15-CHINATOWN/2025-03-15-CHINATOWN-MP3S/2025-04-21-SHORTER-MP3-CHAPTERS/2025-04-21-Chapter+2+Look+Tin+Eli.ogg'
+    ];
+  }
+  
   // Cache static assets with retry logic
   event.waitUntil(
     caches.open(CACHE_NAME)
@@ -69,6 +89,10 @@ self.addEventListener('install', event => {
             }
           })
         );
+      })
+      .catch(error => {
+        console.error('Service worker installation error:', error);
+        // Still allow the service worker to install even if caching fails
       })
   );
   

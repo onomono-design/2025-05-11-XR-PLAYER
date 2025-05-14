@@ -10,7 +10,8 @@ import {
   outroCTA_backlink as ConfigOutroCTA_backlink,
   devToggleAllowed as ConfigDevToggleAllowed,
   isMobile as ConfigIsMobile,
-  PERFORMANCE as ConfigPERFORMANCE
+  PERFORMANCE as ConfigPERFORMANCE,
+  isIOS as ConfigIsIOS
 } from './js/config.js';
 
 // Use imported values or fallback to local
@@ -38,7 +39,7 @@ const deviceCapabilities = {
   supportsWebM: document.createElement('video').canPlayType('video/webm; codecs="vp8, vorbis"').replace(/no/, ''),
   videoFrameCallbackSupported: false, // Will be determined after video element is created
   estimatedBandwidth: 0, // Will be estimated during load
-  isAppleDevice: /iPad|iPhone|iPod|Mac/.test(navigator.userAgent),
+  isAppleDevice: ConfigIsIOS, // Use the improved detection from config.js
   batteryLevel: null,
   lowPowerMode: false
 };
@@ -109,17 +110,31 @@ function detectLowEndDevice() {
 if ('serviceWorker' in navigator) {
   // Check if service worker is already controlling the page
   const isControlled = Boolean(navigator.serviceWorker.controller);
+  let serviceWorkerRegistration = null;
   
   // Register service worker
-  navigator.serviceWorker.register('/sw.js')
+  navigator.serviceWorker.register('sw.js')
     .then(registration => {
       console.log('Service Worker registered with scope:', registration.scope);
+      serviceWorkerRegistration = registration;
       
       // Listen for messages from service worker
       navigator.serviceWorker.addEventListener('message', event => {
         if (event.data && event.data.action === 'mediaCached') {
           console.log('Media cache status:', event.data.status);
         }
+      });
+      
+      // Listen for service worker updates
+      registration.addEventListener('updatefound', () => {
+        const newWorker = registration.installing;
+        newWorker.addEventListener('statechange', () => {
+          if (newWorker.state === 'activated') {
+            console.log('Updated Service Worker activated');
+            // Prime media cache after update
+            primeMediaCache();
+          }
+        });
       });
       
       // Prime media cache if service worker is ready
@@ -129,27 +144,36 @@ if ('serviceWorker' in navigator) {
         // Wait for the service worker to be activated
         navigator.serviceWorker.ready.then(() => {
           primeMediaCache();
+        }).catch(error => {
+          console.error('Service worker activation failed:', error);
         });
       }
     })
     .catch(error => {
       console.log('Service Worker registration failed:', error);
     });
-}
-
-// Function to prime the media cache
-function primeMediaCache() {
-  if (!navigator.serviceWorker.controller) return;
-  
-  navigator.serviceWorker.controller.postMessage({
-    action: 'primeMediaCache'
-  });
-  
-  console.log('Requested media cache priming');
+    
+  // Add a more robust primeMediaCache function
+  function primeMediaCache() {
+    if (!navigator.serviceWorker.controller) {
+      console.warn('No active service worker found, cannot prime media cache');
+      return;
+    }
+    
+    try {
+      navigator.serviceWorker.controller.postMessage({
+        action: 'primeMediaCache'
+      });
+      
+      console.log('Requested media cache priming');
+    } catch (error) {
+      console.error('Error requesting media cache priming:', error);
+    }
+  }
 }
 
 // Performance optimization settings
-const PERFORMANCE = {
+const PERFORMANCE = ConfigPERFORMANCE || {
   // Lower is better for performance, higher for quality
   textureQuality: isMobile ? 0.5 : 1.0,
   useProgressiveLoading: true,
@@ -191,12 +215,26 @@ if (PERFORMANCE.aggressiveGarbageCollection) {
       console.log("Triggering memory cleanup");
       window.gc();
     } else {
-      // Attempt to help GC by removing references and allocating temporary objects
-      const tempArray = [];
-      for (let i = 0; i < 10000; i++) {
-        tempArray.push(new ArrayBuffer(1024));
+      // Better approach than creating temporary objects
+      console.log("Suggesting memory cleanup to browser");
+      
+      // Clear any cached objects in our code
+      if (window.textureCache) {
+        window.textureCache.clear();
       }
-      tempArray.length = 0;
+      
+      // Use the browser's low-memory API if available
+      if (navigator.sendBeacon) {
+        navigator.sendBeacon('javascript:void(0)', '');
+      }
+      
+      // Schedule cleanup during idle time if possible
+      if (window.requestIdleCallback) {
+        window.requestIdleCallback(() => {
+          // Clear any object references we no longer need
+          // This is a hint to the GC
+        }, { timeout: 1000 });
+      }
     }
   }, PERFORMANCE.gcIntervalMs);
 }

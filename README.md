@@ -210,6 +210,64 @@ const audio_src = "path/to/your/audio.mp3";
 ## Installation
 
 1. Download or clone the repository
-2. Configure the media sources in script.js
-3. Host on a web server that supports HTTPS (required for device orientation on mobile)
-4. For mobile usage, ensure your server has proper CORS headers configured 
+2. Run `npm install` to install dependencies
+3. Configure the media sources in js/config.js
+4. Host on a web server that supports HTTPS (required for device orientation on mobile)
+5. For mobile usage, ensure your server has proper CORS headers configured 
+
+## Deployment Considerations
+
+When deploying this application to different hosting environments, be aware of the following:
+
+### Service Worker Behavior
+
+The player uses a service worker for media caching and offline functionality. Be mindful of:
+
+1. **Path Resolution**: Service worker registration uses relative paths which may need adjustment depending on your server configuration
+2. **HTTPS Requirement**: Service workers only function on HTTPS connections (except on localhost)
+3. **Hosting on Subpaths**: When hosting on GitHub Pages or similar platforms where content is served from a subdirectory (e.g., `/repo-name/`), you may need to adjust service worker paths
+4. **Cache Storage Limits**: Different browsers have different limits on how much data can be cached
+5. **Clearing Cache**: If you update media files, users may need to clear their browser cache or reload the page
+
+### Environment-Specific Setup
+
+#### GitHub Pages
+When deploying to GitHub Pages:
+- Ensure all paths are relative
+- Be mindful of the base path (typically `/repo-name/`)
+- You may need to include a `.nojekyll` file to prevent Jekyll processing
+
+#### Vercel
+When deploying to Vercel:
+- Set up proper build configuration
+- Configure CORS headers if needed
+- Consider setting up redirects for cleaner URLs
+
+#### Local Development
+For local testing:
+- Run `npm run dev` to start the local server
+- Service workers will function on `localhost` without HTTPS
+
+### Troubleshooting Deployment Issues
+
+If you encounter issues with deployment:
+
+1. **Check console errors**: Most issues will be visible in the browser console
+2. **Verify service worker registration**: Ensure the service worker is properly registered and active
+3. **Path issues**: Confirm all paths (media files, scripts, etc.) are correctly resolved
+4. **CORS errors**: Check if media files require specific CORS headers
+5. **Service worker scoping**: The service worker can only control pages within its scope
+
+## Recent Updates and Fixes
+
+This version includes several important fixes:
+
+1. **Improved Service Worker**: Fixed path inconsistencies and added better error handling
+2. **Configuration Cleanup**: Consolidated media URLs and performance settings in a single location
+3. **Device Detection**: Improved iOS and mobile device detection for better compatibility
+4. **Memory Management**: Implemented safer memory management practices
+5. **Path Handling**: Updated path references to be consistently relative for better deployment flexibility
+6. **Dependency Management**: Added explicit http-server dependency for easier setup
+7. **Error Recovery**: Added more robust error handling throughout the application
+
+These changes improve compatibility across different hosting environments and devices. 

@@ -63,7 +63,7 @@
   // NEW: Register service worker for video caching if supported
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
-      navigator.serviceWorker.register('/sw.js').catch(err => {
+      navigator.serviceWorker.register('sw.js').catch(err => {
         console.log('ServiceWorker registration failed:', err);
       });
     });
@@ -85,32 +85,37 @@
   // ENHANCEMENT: Add polyfill for browsers missing requestVideoFrameCallback
   if (HTMLVideoElement && !('requestVideoFrameCallback' in HTMLVideoElement.prototype)) {
     HTMLVideoElement.prototype.requestVideoFrameCallback = function(callback) {
-      const id = window.requestAnimationFrame(() => {
-        // Check if video has loaded
-        if (this.readyState >= 2) {
-          callback(performance.now(), {
+      let handle = 0;
+      
+      const processFrame = (now) => {
+        // Only call the callback when the video has valid data
+        if (this.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+          callback(now, {
             width: this.videoWidth,
             height: this.videoHeight,
-            mediaTime: this.currentTime
+            mediaTime: this.currentTime,
+            presentationTime: now,
+            expectedDisplayTime: now,
+            processingDuration: 0,
+            presentedFrames: 0,
+            captureTime: now
           });
         } else {
-          // If video not loaded, poll via timeupdate
-          const onTimeUpdate = () => {
-            callback(performance.now(), {
-              width: this.videoWidth,
-              height: this.videoHeight,
-              mediaTime: this.currentTime
-            });
-            this.removeEventListener('timeupdate', onTimeUpdate);
+          // If video metadata not loaded, wait for loadeddata event
+          const onLoadedData = () => {
+            this.removeEventListener('loadeddata', onLoadedData);
+            requestAnimationFrame(processFrame);
           };
-          this.addEventListener('timeupdate', onTimeUpdate);
+          this.addEventListener('loadeddata', onLoadedData);
         }
-      });
-      return id;
+      };
+      
+      handle = requestAnimationFrame(processFrame);
+      return handle;
     };
     
-    HTMLVideoElement.prototype.cancelVideoFrameCallback = function(id) {
-      window.cancelAnimationFrame(id);
+    HTMLVideoElement.prototype.cancelVideoFrameCallback = function(handle) {
+      cancelAnimationFrame(handle);
     };
   }
   
@@ -197,6 +202,13 @@
 <div id="loadingSpinner" class="spinner-container">
   <div class="spinner"></div>
 </div>
+<div id="ctaOverlay" class="overlay" style="display: none;">
+  <div class="overlay-content">
+    <h2>Get the full experience</h2>
+    <p>This is just a teaser. Unlock the full tour for more immersive content.</p>
+    <a id="ctaLink" href="#" class="btn primary-btn">Unlock Full Tour</a>
+  </div>
+</div>
 <div id="audioControlsContainer" class="controls-container">
   <div id="trackInfo" class="track-info"></div>
   <audio id="audioPlayer" controls crossorigin="anonymous" preload="auto" class="audio-player">
@@ -207,12 +219,6 @@
   <div class="chapter-nav" id="chapterNav">
     <button id="prevChapter" class="nav-btn" aria-label="Previous Chapter">&laquo;</button>
     <button id="nextChapter" class="nav-btn" aria-label="Next Chapter">&raquo;</button>
-  </div>
-</div>
-<div id="ctaOverlay" class="overlay initially-hidden" style="display: none !important;">
-  <div class="cta-box" id="ctaBox">
-    <div class="cta-logo"></div>
-    <div class="cta-text">Take the full tour here</div>
   </div>
 </div>
 <div class="top-bar">
