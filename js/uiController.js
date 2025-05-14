@@ -164,7 +164,16 @@ const initUI = (isXR) => {
   
   // Recenter button
   const recBtn = $('recenterButton');
-  recBtn.addEventListener('click', recenter);
+  recBtn.addEventListener('click', function() {
+    console.log("Recenter button clicked in uiController");
+    if (typeof window.recenterCamera === 'function') {
+      window.recenterCamera();
+    } else if (typeof window.recenterCameraFromAFrame === 'function') {
+      window.recenterCameraFromAFrame();
+    } else {
+      console.error("No recenter functions available in uiController");
+    }
+  });
   
   // CTA overlay
   const ctaBox = $('ctaBox');

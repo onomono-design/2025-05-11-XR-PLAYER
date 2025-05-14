@@ -327,6 +327,248 @@ function showUserMessage(message, duration = 3000) {
   }, duration);
 }
 
+// NEW A-Frame component for camera recentering
+AFRAME.registerComponent('camera-recenter', {
+  schema: {
+    // Add any schema properties if needed in the future
+  },
+  init: function() {
+    console.log('Camera recenter component initialized on:', this.el.tagName);
+    
+    // Wait a frame to ensure the element is properly initialized
+    setTimeout(() => {
+      this.initComponent();
+    }, 0);
+  },
+  
+  initComponent: function() {
+    this.cameraEl = this.el; // Assumes this component is attached to the camera entity
+    console.log('Camera recenter running delayed initialization');
+
+    if (!this.cameraEl.isEntity || !this.cameraEl.hasAttribute('camera')) {
+        console.warn('camera-recenter component is not attached to a camera entity. Ensure it is on the <a-camera> element.');
+        // Attempt to find the scene's active camera if not directly on a camera.
+        if (this.el.sceneEl && this.el.sceneEl.camera) {
+             this.cameraEl = this.el.sceneEl.camera.el;
+             console.log('Fallback: Found scene camera for recenter component:', this.cameraEl);
+        } else {
+            console.error('CRITICAL: Could not find a camera for camera-recenter component.');
+            // Further fallback: try to find camera by selector
+            const sceneEl = document.querySelector('a-scene');
+            if (sceneEl) {
+              const cameraEl = sceneEl.querySelector('[camera]');
+              if (cameraEl) {
+                console.log('Second fallback: Found camera by query selector:', cameraEl);
+                this.cameraEl = cameraEl;
+              }
+            }
+            if (!this.cameraEl) {
+              console.error('All fallback attempts failed. Camera recentering may not work.');
+              return;
+            }
+        }
+    }
+    
+    // Store initial target rotation for reference
+    this.targetRotation = { x: 0, y: -90, z: 0 }; // Initial centered view
+    this.deviceOrientationOffset = { alpha: 0, beta: 0, gamma: 0 };
+    this.lastDeviceOrientation = null;
+    
+    // Expose a global function that can be called from anywhere
+    window.recenterCameraFromAFrame = this.recenterView.bind(this);
+    
+    // Listen for recenter events
+    this.cameraEl.addEventListener('recenter', this.recenterView.bind(this));
+    
+    // Setup device orientation tracking if on mobile
+    this.setupDeviceOrientationTracking();
+    
+    console.log('Camera recenter component fully initialized');
+  },
+  
+  setupDeviceOrientationTracking: function() {
+    if (AFRAME.utils.device.isMobile() || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)) {
+      this.deviceOrientationHandler = this.handleDeviceOrientation.bind(this);
+      window.addEventListener('deviceorientation', this.deviceOrientationHandler);
+    }
+  },
+  
+  handleDeviceOrientation: function(event) {
+    this.lastDeviceOrientation = {
+      alpha: event.alpha || 0,
+      beta: event.beta || 0,
+      gamma: event.gamma || 0
+    };
+  },
+  
+  recenterView: function() { // Renamed to avoid conflict with a potential 'recenter' event
+    console.log('A-Frame camera-recenter component recenterView called');
+    try {
+      if (!this.cameraEl) {
+          console.error('Camera element not found in camera-recenter component for recenterView.');
+          return false;
+      }
+
+      const lookControls = this.cameraEl.components['look-controls'];
+      if (!lookControls) {
+        console.error('Look-controls component not found on camera:', this.cameraEl);
+        return false;
+      }
+
+      const isMobile = AFRAME.utils.device.isMobile() || /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+      console.log('Recenter: Device detected as:', isMobile ? 'mobile' : 'desktop');
+      showUserMessage(isMobile ? "Recentering view based on device orientation" : "Resetting camera view", 1500);
+
+
+      if (isMobile) {
+        // MOBILE RECENTER LOGIC: Adjust videosphere rotation
+        const videosphereEl = document.querySelector('#videosphere');
+        if (!videosphereEl) {
+          console.error('Videosphere entity with id="videosphere" not found for mobile recenter.');
+          return false;
+        }
+
+        const cameraObject3D = this.cameraEl.object3D;
+        const tempQuaternion = new THREE.Quaternion();
+        cameraObject3D.getWorldQuaternion(tempQuaternion);
+        
+        const cameraWorldEulerYXZ = new THREE.Euler();
+        cameraWorldEulerYXZ.setFromQuaternion(tempQuaternion, 'YXZ');
+
+        const cameraWorldYawDeg = THREE.MathUtils.radToDeg(cameraWorldEulerYXZ.y);
+        
+        const vsCurrentRotation = videosphereEl.getAttribute('rotation') || { x: 0, y: 0, z: 0 };
+        
+        console.log('Mobile Recenter: Current camera world yaw (degrees):', cameraWorldYawDeg);
+        console.log('Mobile Recenter: Setting videosphere Y rotation to match camera world yaw.');
+        
+        videosphereEl.setAttribute('rotation', {
+          x: vsCurrentRotation.x,
+          y: cameraWorldYawDeg,
+          z: vsCurrentRotation.z
+        });
+
+        if (lookControls.yawObject) {
+          lookControls.yawObject.rotation.y = 0; 
+        }
+        if (lookControls.pitchObject) {
+          lookControls.pitchObject.rotation.x = 0;
+        }
+        
+        if (typeof lookControls.updateOrientation === 'function') {
+          lookControls.updateOrientation();
+        }
+        if (lookControls.deviceOrientationMagicWindowDelta) {
+            lookControls.deviceOrientationMagicWindowDelta.set(0,0,0);
+            console.log('Mobile Recenter: Reset deviceOrientationMagicWindowDelta.');
+        }
+        console.log('Mobile Recenter: Videosphere rotation adjusted and look-controls touch input reset.');
+
+      } else {
+        // DESKTOP RECENTER LOGIC: Reset camera to fixed orientation (0, -90, 0)
+        // NOTE: The README states desktop camera initial rotation (0, -90, 0).
+        // The existing `script.js` uses `initialCameraRotation = {x: 0, y: 90, z: 0}` for desktop.
+        // We will use the README's (0, -90, 0) for the new component.
+        const desktopTargetRotationDeg = { x: 0, y: -90, z: 0 };
+
+        if (lookControls.yawObject && lookControls.pitchObject) {
+          lookControls.pitchObject.rotation.x = THREE.MathUtils.degToRad(desktopTargetRotationDeg.x);
+          lookControls.yawObject.rotation.y = THREE.MathUtils.degToRad(desktopTargetRotationDeg.y);
+          
+          if (typeof lookControls.updateRotation === 'function') {
+              lookControls.updateRotation();
+          } else if (typeof lookControls.update === 'function') {
+              lookControls.update();
+          }
+          console.log('Desktop Recenter: Reset look-controls pitch/yaw to target:', desktopTargetRotationDeg);
+        } else {
+          console.warn('Desktop Recenter: Look-controls yawObject or pitchObject not available.');
+        }
+        this.cameraEl.setAttribute('rotation', desktopTargetRotationDeg);
+        console.log('Desktop Recenter: Set camera entity rotation attribute to:', desktopTargetRotationDeg);
+      }
+
+      // Force A-Frame to update the camera view and render
+      if (AFRAME.scenes[0] && AFRAME.scenes[0].camera) {
+        AFRAME.scenes[0].camera.updateMatrixWorld(true); // Force update
+      }
+      if (typeof forceAFrameRender === 'function') { // Assuming forceAFrameRender is globally available
+        forceAFrameRender();
+      } else if (this.el.sceneEl) {
+        this.el.sceneEl.renderer.render(this.el.sceneEl.object3D, this.el.sceneEl.camera); // Basic render
+      }
+
+      console.log('Camera recentering via component completed.');
+      return true;
+
+    } catch (e) {
+      console.error('Error in A-Frame camera-recenter component recenterView:', e);
+      return false;
+    }
+  }
+});
+
+// Global function to trigger recentering via the component
+window.recenterCamera = function() {
+  console.log('Global recenterCamera function called');
+  
+  // First try to find by ID
+  let cameraEl = document.querySelector('#cameraEntity');
+  
+  // If not found by ID, try other selectors
+  if (!cameraEl || !cameraEl.components || !cameraEl.components['camera-recenter']) {
+    console.warn('Camera entity with ID "cameraEntity" not found or missing component. Trying fallbacks...');
+    
+    // Try finding any entity with camera-recenter
+    cameraEl = document.querySelector('[camera-recenter]');
+    
+    // If still not found, try any camera
+    if (!cameraEl || !cameraEl.components || !cameraEl.components['camera-recenter']) {
+      cameraEl = document.querySelector('[camera]');
+      console.log('Trying to find any camera entity:', cameraEl);
+    }
+    
+    // If all attempts failed
+    if (!cameraEl) {
+      console.error('Could not find any camera entity. Cannot recenter.');
+      return false;
+    }
+  }
+  
+  // Try using the component's method if available
+  if (cameraEl.components && cameraEl.components['camera-recenter']) {
+    console.log('Found camera entity with camera-recenter component, dispatching recenter event.');
+    // Dispatch the recenter event to ensure it's handled properly
+    cameraEl.dispatchEvent(new CustomEvent('recenter'));
+    return true;
+  } else {
+    console.error('Camera entity found but missing camera-recenter component.');
+    
+    // Fallback to a basic camera reset
+    try {
+      console.log('Attempting basic camera reset as fallback');
+      cameraEl.setAttribute('rotation', {x: 0, y: -90, z: 0});
+      
+      // Try to update look-controls if available
+      if (cameraEl.components && cameraEl.components['look-controls']) {
+        const lookControls = cameraEl.components['look-controls'];
+        if (lookControls.yawObject) lookControls.yawObject.rotation.y = THREE.MathUtils.degToRad(-90);
+        if (lookControls.pitchObject) lookControls.pitchObject.rotation.x = 0;
+      }
+      
+      // Force a render update
+      if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
+        AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+      }
+      
+      return true;
+    } catch (e) {
+      console.error('Even fallback camera reset failed:', e);
+      return false;
+    }
+  }
+};
+
 // Configure video quality for mobile devices
 const configureVideoForDevice = () => {
   // ENHANCEMENT: Run device capability detection first
@@ -391,8 +633,76 @@ const configureVideoForDevice = () => {
 };
 
 // Store initial camera and videosphere orientations for reference
-let initialCameraRotation = {x: 0, y: 0, z: 0};
+let initialCameraRotation = {x: 0, y: 90, z: 0};
 let initialVideosphereRotation = {x: 0, y: -90, z: 0};
+
+// Initialize desktop-specific camera controls
+function setupDesktopCameraControls() {
+  if (!camera || !window.AFRAME) return;
+  
+  console.log("Setting up desktop-specific camera controls");
+  
+  const desktopControls = {
+    touchEnabled: true,
+    magicWindowTrackingEnabled: false, // Explicitly disable device orientation on desktop
+    pointerLockEnabled: false,
+    reverseMouseDrag: false,
+    dragFactor: 1.0,             // Normal mouse drag sensitivity
+    horizontalDragFactor: 1.0,   // Normal horizontal drag
+    verticalDragFactor: 1.0,     // Normal vertical drag (allow full tilt control)
+    smoothingEnabled: true,
+    smoothingFactor: 0.15
+  };
+  
+  camera.setAttribute('look-controls', desktopControls);
+  console.log("Applied desktop mouse controls with full pan and tilt capability");
+}
+
+// For mobile fallback when orientation is denied or unavailable
+function setupMobileFallbackControls() {
+  if (!camera || !window.AFRAME) return;
+  
+  console.log("Setting up mobile fallback touch controls");
+  
+  const fallbackTouchControls = {
+    touchEnabled: true,
+    magicWindowTrackingEnabled: false, // Disable device orientation
+    pointerLockEnabled: false,
+    reverseMouseDrag: false,
+    // Allow full control with touch since device orientation isn't available
+    dragFactor: 0.5,           // Higher sensitivity for better experience
+    horizontalDragFactor: 1.0, // Full horizontal control
+    verticalDragFactor: 1.0,   // Full vertical control since no orientation
+    smoothingEnabled: true,
+    smoothingFactor: 0.15
+  };
+  
+  camera.setAttribute('look-controls', fallbackTouchControls);
+  console.log("Applied enhanced mobile touch controls with full pan and tilt");
+}
+
+// For mobile with device orientation enabled
+function setupMobileOrientationControls() {
+  if (!camera || !window.AFRAME) return;
+  
+  console.log("Setting up mobile device orientation controls");
+  
+  const orientationControls = {
+    touchEnabled: true,
+    magicWindowTrackingEnabled: true, // Enable device orientation tracking
+    pointerLockEnabled: false,
+    reverseMouseDrag: false,
+    // Custom factors to make touch only affect horizontal rotation
+    dragFactor: 0.2,           // Make drag less sensitive for better control
+    verticalDragFactor: 0.0001, // Nearly disable vertical drag from touch (horizon lock)
+    horizontalDragFactor: 1.0,  // Keep horizontal drag at normal sensitivity
+    smoothingEnabled: true,
+    smoothingFactor: 0.15
+  };
+  
+  camera.setAttribute('look-controls', orientationControls);
+  console.log("Applied mobile device orientation controls with touch panning only");
+}
 
 window.addEventListener('DOMContentLoaded',()=>{
  const $=id=>document.getElementById(id);
@@ -413,6 +723,10 @@ window.addEventListener('DOMContentLoaded',()=>{
  let videoReady = false;
  let audioReady = false;
  let overlayShown = false;
+ 
+ // Local reference to initial rotation values
+ let localInitialCameraRotation = {x: 0, y: -90, z: 0}; // UPDATED for consistency with README
+ let localInitialVideosphereRotation = {x: 0, y: -90, z: 0};
  
  // Ensure CTA overlay is hidden at startup with !important to override any CSS
  overlay.style.setProperty('display', 'none', 'important');
@@ -604,13 +918,91 @@ window.addEventListener('DOMContentLoaded',()=>{
  let spinnerTimeout = null;
  let spinnerActive = false;
  
- // Control spinner with debounce
+ // NEW: Function to ensure spinner is properly centered
+ const ensureSpinnerCentered = () => {
+   const spinner = $('loadingSpinner');
+   if (spinner) {
+     // Force re-centering with inline styles
+     spinner.style.position = 'fixed';
+     spinner.style.top = '50%';
+     spinner.style.left = '50%';
+     spinner.style.transform = 'translate(-50%, -50%)';
+     spinner.style.right = 'auto';
+     spinner.style.bottom = 'auto';
+     spinner.style.margin = '0';
+     spinner.style.zIndex = '999';
+     
+     // Additional centering fallbacks for broader browser support
+     spinner.style.webkitTransform = 'translate(-50%, -50%)';
+     spinner.style.mozTransform = 'translate(-50%, -50%)';
+     spinner.style.msTransform = 'translate(-50%, -50%)';
+     spinner.style.oTransform = 'translate(-50%, -50%)';
+     spinner.style.translate = '-50% -50%';
+   }
+ };
+
+ // Add resize listener to maintain spinner centering
+ window.addEventListener('resize', ensureSpinnerCentered);
+
+ // Also call it on DOMContentLoaded
+ document.addEventListener('DOMContentLoaded', ensureSpinnerCentered);
+
+ // NEW: Add layout shift detection for more reliable centering
+ if ('ResizeObserver' in window) {
+   // Create observer to watch for body size changes
+   const bodyObserver = new ResizeObserver(() => {
+     ensureSpinnerCentered();
+   });
+   
+   // Start observing the body
+   document.addEventListener('DOMContentLoaded', () => {
+     bodyObserver.observe(document.body);
+   });
+ }
+
+ // NEW: Watch for layout shifts with MutationObserver
+ if ('MutationObserver' in window) {
+   const layoutObserver = new MutationObserver((mutations) => {
+     // Look for mutations that might affect layout
+     const layoutChanging = mutations.some(mutation => 
+       mutation.type === 'attributes' && 
+       (mutation.attributeName === 'style' || mutation.attributeName === 'class')
+     );
+     
+     if (layoutChanging && spinnerActive) {
+       ensureSpinnerCentered();
+     }
+   });
+   
+   // Start observing body for attribute changes that could affect layout
+   document.addEventListener('DOMContentLoaded', () => {
+     layoutObserver.observe(document.body, { 
+       attributes: true,
+       subtree: true,
+       attributeFilter: ['style', 'class']
+     });
+   });
+ }
+
+ // Also ensure centering when orientation changes
+ window.addEventListener('orientationchange', () => {
+   ensureSpinnerCentered();
+   // Re-check after orientation change completes
+   setTimeout(ensureSpinnerCentered, 300);
+ });
+
+ // Modified spinner control with centering
  const showSpinner = () => {
    if (spinnerTimeout) {
      clearTimeout(spinnerTimeout);
    }
    if (!spinnerActive) {
+     // Ensure proper centering BEFORE showing the spinner
+     ensureSpinnerCentered();
+     // Now show the spinner
      spinner.style.display = 'flex';
+     // Double-check centering after display change
+     requestAnimationFrame(ensureSpinnerCentered);
      spinnerActive = true;
    }
  };
@@ -837,35 +1229,44 @@ window.addEventListener('DOMContentLoaded',()=>{
 
  // Listen for A-Frame scene loaded event
  document.addEventListener('a-scene-loaded', () => {
-   console.log('A-Frame scene fully loaded, forcing render');
+   console.log("A-Frame scene loaded");
    
-   // Store initial rotations for reference
+   // Get references to A-Frame entities (refresh them)
+   scene = document.querySelector('a-scene');
+   camera = document.querySelector('[camera]');
+   videosphere = document.querySelector('#videosphere');
+   
    if (camera) {
-     const camRot = camera.getAttribute('rotation');
-     initialCameraRotation = {
-       x: camRot.x || 0,
-       y: camRot.y || 0,
-       z: camRot.z || 0
+     // Store initial camera rotation for reference
+     localInitialCameraRotation = {
+       x: 0,
+       y: 90, // Initial forward view on startup
+       z: 0
      };
-   }
-   
-   if (videosphere) {
-     const vsRot = videosphere.getAttribute('rotation');
-     initialVideosphereRotation = {
-       x: vsRot.x || 0,
-       y: vsRot.y || -90,
-       z: vsRot.z || 0
-     };
-   }
-   
-   setTimeout(() => {
-     forceAFrameRender();
      
-     // Force several renders with increasing delays to ensure visibility
-     [100, 300, 600].forEach(delay => {
-       setTimeout(forceAFrameRender, delay);
-     });
-   }, 50);
+     // Update global reference as well
+     initialCameraRotation = { ...localInitialCameraRotation };
+     
+     // Apply initial camera rotation
+     camera.setAttribute('rotation', localInitialCameraRotation);
+     console.log("Applied initial camera rotation:", localInitialCameraRotation);
+     
+     // Set up device-specific controls immediately
+     if (!isMobile) {
+       // Desktop: set up explicit desktop controls
+       setupDesktopCameraControls();
+     }
+     
+     // Store initial videosphere rotation
+     if (videosphere) {
+       localInitialVideosphereRotation = videosphere.getAttribute('rotation') || {x: 0, y: -90, z: 0};
+       initialVideosphereRotation = { ...localInitialVideosphereRotation };
+       console.log("Initial videosphere rotation:", localInitialVideosphereRotation);
+     }
+   }
+   
+   // Force an initial render now that the scene is loaded
+   forceAFrameRender();
  });
 
  // Add a window load event to force render
@@ -1092,76 +1493,118 @@ window.addEventListener('DOMContentLoaded',()=>{
    bufferMonitorInterval = setInterval(monitorVideoBuffer, 3000); // More frequent checks (was 5000)
  }
 
- // ENHANCEMENT: Improved recenter function with user feedback
+ // ENHANCEMENT: Improved recenter function with user feedback - moved inside DOMContentLoaded scope
  function recenter(){
-   if(!camera || !window.AFRAME) return;
+   // Get fresh references to ensure we're using the latest elements
+   const camera = document.querySelector('[camera]');
+   const videosphere = document.querySelector('#videosphere');
    
-   // Show feedback
+   if(!camera || !window.AFRAME) {
+     console.error("Cannot recenter: camera or AFRAME not available");
+     return;
+   }
+   
+   // Show feedback based on device type
    showUserMessage(isMobile ? "Recentering view based on device orientation" : "Resetting camera view", 1500);
+   
+   console.log("Recenter called, camera:", camera, "initialRotation:", localInitialCameraRotation);
    
    // Check if we're on mobile
    if (isMobile) {
      try {
-       // For mobile, adjusting the videosphere is the most reliable way to recenter
+       // Check if device orientation is enabled/available
+       const hasOrientation = window.deviceOrientationEnabled !== false;
        
-       // First, get current device orientation if available
-       let deviceAlpha = 0;
-       window.addEventListener('deviceorientation', function orientationHandler(event) {
-         if (event.alpha !== null) {
-           deviceAlpha = event.alpha;
-         }
-         window.removeEventListener('deviceorientation', orientationHandler);
+       // Helper function for mobile fallback recentering
+       function mobileFallbackRecenter() {
+         console.log("Using fallback recenter method for mobile");
+         const currentY = camera.getAttribute('rotation').y || 0;
          
-         // Step 2: Adjust the videosphere based on device orientation
-         // We want to reset the videosphere so that current direction becomes "front"
-         if (videosphere) {
-           const currentY = camera.getAttribute('rotation').y || 0;
-           
-           // Apply adjustment to videosphere (maintain the -90 base offset)
-           videosphere.setAttribute('rotation', {
-             x: initialVideosphereRotation.x,
-             y: initialVideosphereRotation.y - currentY, 
-             z: initialVideosphereRotation.z
-           });
-           
-           console.log(`Recentered on mobile: camera Y = ${currentY}, adjusted videosphere Y = ${initialVideosphereRotation.y - currentY}`);
-         }
+         // Apply videosphere adjustment based on current camera rotation
+         videosphere.setAttribute('rotation', {
+           x: localInitialVideosphereRotation.x,
+           y: localInitialVideosphereRotation.y - currentY, 
+           z: localInitialVideosphereRotation.z
+         });
          
-         // Force immediate render to show changes
+         console.log(`Recentered on mobile (fallback): camera Y = ${currentY}, adjusted videosphere Y = ${localInitialVideosphereRotation.y - currentY}`);
+         
+         // Force immediate render
          forceAFrameRender();
-       }, { once: true });
+       }
        
-       // If no device orientation event fires within 200ms, just use camera rotation
-       setTimeout(() => {
-         if (videosphere) {
-           const currentY = camera.getAttribute('rotation').y || 0;
+       if (hasOrientation) {
+         // For mobile with orientation enabled, adjusting the videosphere is the most reliable way to recenter
+         
+         // First, get current device orientation if available
+         let deviceAlpha = 0;
+         let orientationCaptured = false;
+         let orientationTimeoutId = null;
+         
+         // Set timeout first to ensure it runs if no event occurs
+         orientationTimeoutId = setTimeout(() => {
+           if (!orientationCaptured) {
+             console.log("No device orientation event captured within timeout, using fallback");
+             window.removeEventListener('deviceorientation', orientationHandler);
+             mobileFallbackRecenter();
+           }
+         }, 200);
+         
+         function orientationHandler(event) {
+           if (event.alpha !== null) {
+             deviceAlpha = event.alpha;
+             orientationCaptured = true;
+           }
+           window.removeEventListener('deviceorientation', orientationHandler);
+           clearTimeout(orientationTimeoutId);
            
-           // Apply adjustment to videosphere (maintain the -90 base offset)
-           videosphere.setAttribute('rotation', {
-             x: initialVideosphereRotation.x,
-             y: initialVideosphereRotation.y - currentY, 
-             z: initialVideosphereRotation.z
-           });
-           
-           console.log(`Recentered on mobile (timeout): camera Y = ${currentY}, adjusted videosphere Y = ${initialVideosphereRotation.y - currentY}`);
-           
-           // Force immediate render
-           forceAFrameRender();
+           if (orientationCaptured) {
+             // Get current camera Y rotation
+             const currentY = camera.getAttribute('rotation').y || 0;
+             
+             // Apply adjustment to videosphere to align with user's current heading
+             // This makes the current view direction the "front" view
+             videosphere.setAttribute('rotation', {
+               x: localInitialVideosphereRotation.x,
+               y: localInitialVideosphereRotation.y - currentY, 
+               z: localInitialVideosphereRotation.z
+             });
+             
+             console.log(`Recentered on mobile: camera Y = ${currentY}, adjusted videosphere Y = ${localInitialVideosphereRotation.y - currentY}`);
+             
+             // Force immediate render to show changes
+             forceAFrameRender();
+           } else {
+             // Use camera rotation method as fallback if orientation data is null
+             mobileFallbackRecenter();
+           }
          }
-       }, 200);
+         
+         window.addEventListener('deviceorientation', orientationHandler, { once: true });
+       } else {
+         // If device orientation is disabled/unavailable, use the fallback method
+         mobileFallbackRecenter();
+       }
      } catch (e) {
        console.error("Error during mobile recenter:", e);
+       showUserMessage("Recenter encountered an error", 1500);
      }
    } else {
-     // Desktop approach - simply reset the camera orientation
+     // Desktop approach - reset the camera to its initial rotation values exactly
+     // This simulates "returning home" in the 360 viewport
      camera.setAttribute('position', {x: 0, y: 1.6, z: 0});
      camera.setAttribute('rotation', {
-       x: initialCameraRotation.x,
-       y: initialCameraRotation.y,
-       z: initialCameraRotation.z
+       x: localInitialCameraRotation.x,
+       y: localInitialCameraRotation.y, // Should be 90 degrees to face forward
+       z: localInitialCameraRotation.z
      });
      
-     console.log("Recentered on desktop");
+     console.log("Recentered on desktop: reset to initial camera rotation", localInitialCameraRotation);
+     
+     // Force A-Frame to update the camera view
+     if (AFRAME.scenes[0] && AFRAME.scenes[0].camera) {
+       AFRAME.scenes[0].camera.updateMatrixWorld();
+     }
      
      // Force immediate render
      forceAFrameRender();
@@ -1172,6 +1615,30 @@ window.addEventListener('DOMContentLoaded',()=>{
    console.log("Audio loaded");
    audioReady=true;
    updateXrButton();
+   
+   // Check if A-Frame is initialized before attempting to recenter
+   if (window.AFRAME && AFRAME.scenes[0] && AFRAME.scenes[0].hasLoaded) {
+     console.log("A-Frame scene is loaded, safe to recenter");
+     if (typeof window.recenterCamera === 'function') { 
+       window.recenterCamera(); 
+     } else { 
+       console.error('recenterCamera not found on audio load'); 
+     }
+   } else {
+     console.log("A-Frame scene not ready yet, will recenter when loaded");
+     // Wait for A-Frame to load before attempting to recenter
+     const recenterWhenReady = () => {
+       console.log("A-Frame scene now loaded, recentering camera");
+       if (typeof window.recenterCamera === 'function') {
+         window.recenterCamera();
+       }
+       document.removeEventListener('a-scene-loaded', recenterWhenReady);
+     };
+     document.addEventListener('a-scene-loaded', recenterWhenReady);
+   }
+   
+   xrMode=!xrMode;
+   layout();
  });
  
  // Playback events
@@ -1219,7 +1686,7 @@ window.addEventListener('DOMContentLoaded',()=>{
    
    // No need to pause - this was causing the interruption
    
-   recenter();
+   if (typeof window.recenterCamera === 'function') { window.recenterCamera(); } else { console.error('recenterCamera not found on mode button click'); }
    xrMode=!xrMode;
    layout();
    
@@ -1247,7 +1714,31 @@ window.addEventListener('DOMContentLoaded',()=>{
    }, 50);
  });
  
- recBtn.addEventListener('click',recenter);
+ recBtn.addEventListener('click', function(e) {
+   console.log("Recenter button clicked");
+   
+   // Use the global recenterCamera function which uses the component
+   if (typeof window.recenterCamera === 'function') {
+     window.recenterCamera();
+   } else if (typeof window.recenterCameraFromAFrame === 'function') {
+     // Fallback to direct component function
+     console.log("Using fallback recenterCameraFromAFrame");
+     window.recenterCameraFromAFrame();
+   } else {
+     console.error("No recenter camera functions available. Check component initialization.");
+   }
+   
+   // Optional: Add a delayed check to see if the rotation was actually changed for debugging
+   setTimeout(() => {
+     const updatedCamera = document.querySelector('#cameraEntity'); // Use ID for consistency
+     if (updatedCamera) {
+        const rotation = updatedCamera.getAttribute('rotation');
+        console.log("Camera rotation after recenter attempt:", rotation);
+     } else {
+        console.log("Could not find camera #cameraEntity after recenter for debug check.");
+     }
+   }, 100);
+ });
  overlay.addEventListener('click',()=> {
    overlay.style.setProperty('display', 'none', 'important');
    overlayShown = false;
@@ -1298,21 +1789,91 @@ window.addEventListener('DOMContentLoaded',()=>{
          
          if (permissionState === 'granted') {
            showUserMessage("Device motion access granted", 1500);
+           
+           // ENHANCEMENT: Add a flag to indicate device orientation permission was granted
+           window.deviceOrientationEnabled = true;
+           
+           // Set up orientation event listener to detect when events start firing
+           window.addEventListener('deviceorientation', function(event) {
+             // Only log once
+             if (!window.hasOrientationListener) {
+               console.log("Device orientation events are active");
+               window.hasOrientationListener = true;
+               
+               // Apply standardized mobile orientation controls
+               setupMobileOrientationControls();
+             }
+           });
          } else {
            // Permission denied - show helpful message
-           showErrorMessage("Device orientation access denied. The 360° view requires motion sensors. Please enable this in your device settings for the full experience.", false);
+           showErrorMessage("Device orientation access denied. The 360° view requires motion sensors for full immersion. You can still navigate using touch, but moving your device won't change the view.", false);
+           
+           // ENHANCEMENT: Set specific flag indicating permission was denied
+           window.deviceOrientationEnabled = false;
+           window.deviceOrientationDenied = true;
+           
+           // Use standardized fallback controls
+           setupMobileFallbackControls();
+           
            // We can still continue but with no motion tracking
            setTimeout(() => {
              errorContainer.style.display = 'none';
+             showUserMessage("Using touch controls instead. Swipe to look around.", 3000);
            }, 4000);
          }
        } catch(e) {
          console.error("Permission error:", e);
-         showUserMessage("Could not access motion sensors - using fallback controls", 2500);
+         showUserMessage("Could not access motion sensors - using touch controls instead", 2500);
+         
+         // ENHANCEMENT: Set flag indicating permission error
+         window.deviceOrientationEnabled = false;
+         window.deviceOrientationError = true;
+         
+         // Use standardized fallback controls
+         setupMobileFallbackControls();
        } finally {
          hideSpinner();
        }
+     } else {
+       // ENHANCEMENT: Handle non-iOS devices that support device orientation without permission
+       console.log("Device orientation available without explicit permission");
+       window.deviceOrientationEnabled = true;
+       
+       // Check if orientation events are actually firing
+       let orientationEventDetected = false;
+       const detectOrientation = (event) => {
+         if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
+           orientationEventDetected = true;
+           window.removeEventListener('deviceorientation', detectOrientation);
+           console.log("Device orientation events confirmed");
+           
+           // Apply standardized mobile orientation controls
+           setupMobileOrientationControls();
+         }
+       };
+       
+       window.addEventListener('deviceorientation', detectOrientation);
+       
+       // For non-iOS devices that don't have orientation events
+       setTimeout(() => {
+         if (!orientationEventDetected) {
+           console.log("No device orientation events detected, falling back to touch");
+           window.deviceOrientationEnabled = false;
+           
+           // Use standardized fallback controls
+           setupMobileFallbackControls();
+           showUserMessage("Device orientation not available. Using touch controls.", 2500);
+         }
+       }, 1000);
      }
+   } else if (isMobile) {
+     // ENHANCEMENT: Handle case where DeviceOrientationEvent is undefined
+     console.log("DeviceOrientationEvent API not available on this mobile device");
+     window.deviceOrientationEnabled = false;
+     
+     // Use standardized fallback controls
+     setupMobileFallbackControls();
+     showUserMessage("Using touch controls (device motion not supported on this device)", 2500);
    }
    
    landing.style.display='none';
@@ -1388,7 +1949,7 @@ window.addEventListener('DOMContentLoaded',()=>{
    
    // No need to pause - just switch modes directly
    
-   recenter();
+   if (typeof window.recenterCamera === 'function') { window.recenterCamera(); } else { console.error('recenterCamera not found on XR toggle mode button click'); }
    xrMode = false;
    layout();
    

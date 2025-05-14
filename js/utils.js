@@ -12,7 +12,17 @@ const showSpinner = () => {
     clearTimeout(spinnerTimeout);
   }
   if (!spinnerActive) {
-    $('loadingSpinner').style.display = 'flex';
+    const spinner = $('loadingSpinner');
+    spinner.style.display = 'flex';
+    // Ensure the spinner is centered by explicitly setting these properties
+    spinner.style.position = 'fixed';
+    spinner.style.top = '50%';
+    spinner.style.left = '50%';
+    spinner.style.transform = 'translate(-50%, -50%)';
+    spinner.style.right = 'auto';
+    spinner.style.bottom = 'auto';
+    spinner.style.margin = '0';
+    spinner.style.zIndex = '999'; // Ensure it's on top
     spinnerActive = true;
   }
 };

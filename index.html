@@ -134,9 +134,11 @@
   <!-- PERFORMANCE IMPROVEMENT: Optimized A-Frame scene configuration -->
   <a-scene embedded 
     vr-mode-ui="enabled:false" 
-    device-orientation-permission-ui="enabled:false" 
-    loading-screen="enabled:false"
+    device-orientation-permission-ui="enabled:true" 
+    loading-screen="dotsColor: white; backgroundColor: black"
     renderer="antialias: false; alpha: false; precision: medium; sortObjects: false; physicallyCorrectLights: false; colorManagement: false; logarithmicDepthBuffer: false; gammaOutput: false;"
+    device-orientation-controls="enabled: true"
+    touch-controls="enabled: true"
     onload="this.renderer.setPixelRatio(Math.min(window.devicePixelRatio * 0.5, 1.0));"
     onloaded="document.dispatchEvent(new CustomEvent('a-scene-loaded'));"
     inspector="url: https://aframe.io/aframe-inspector/dist/aframe-inspector.min.js" >
@@ -166,7 +168,21 @@
       </video>
     </a-assets>
     <a-videosphere id="videosphere" src="#video360" rotation="0 -90 0" visible="true" material="shader: flat; side: back; npot: true;"></a-videosphere>
-    <a-entity id="cameraEntity" camera look-controls="reverseMouseDrag:true;touchEnabled:true;smoothingEnabled:true;smoothingFactor:0.15" position="0 1.6 0"></a-entity>
+    <a-entity id="cameraEntity" camera 
+      look-controls="
+        reverseMouseDrag: true;
+        touchEnabled: true;
+        magicWindowTrackingEnabled: true;
+        pointerLockEnabled: false;
+        smoothingEnabled: true;
+        smoothingFactor: 0.15;
+        dragFactor: 1.0;
+        horizontalDragFactor: 1.0;
+        verticalDragFactor: 1.0;" 
+      position="0 1.6 0" 
+      rotation="0 -90 0"
+      camera-recenter>
+    </a-entity>
   </a-scene>
 </div>
 <div id="audioOnly" class="audio-container">
@@ -227,7 +243,27 @@ document.addEventListener('DOMContentLoaded', function() {
         cameraEntity.setAttribute('look-controls', currentControls + ';smoothingEnabled:true;smoothingFactor:0.15');
       }
     }
+    
+    // Ensure camera-recenter component is attached
+    if (!cameraEntity.hasAttribute('camera-recenter')) {
+      console.log("Attaching missing camera-recenter component");
+      cameraEntity.setAttribute('camera-recenter', '');
+    }
   }
+  
+  // Additional check after A-Frame is initialized
+  document.addEventListener('a-scene-loaded', function() {
+    console.log("A-Frame scene loaded, verifying camera-recenter component");
+    const cameraEl = document.querySelector('#cameraEntity');
+    if (cameraEl && !cameraEl.components['camera-recenter']) {
+      console.log("Re-attaching camera-recenter component after A-Frame loaded");
+      // First remove and then re-add to ensure proper initialization
+      cameraEl.removeAttribute('camera-recenter');
+      setTimeout(() => {
+        cameraEl.setAttribute('camera-recenter', '');
+      }, 100);
+    }
+  });
 });
 </script>
 <script src="script.js" type="module"></script>

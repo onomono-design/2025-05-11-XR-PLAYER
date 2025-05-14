@@ -332,11 +332,13 @@ html, body {
   position: fixed !important;
   top: 50% !important;
   left: 50% !important;
+  right: auto !important;
+  bottom: auto !important;
   transform: translate(-50%, -50%) !important;
   display: none;
-  align-items: center;
-  justify-content: center;
-  z-index: 450;
+  align-items: center !important;
+  justify-content: center !important;
+  z-index: 999 !important;
   background: rgba(17, 17, 17, 0.85) !important;
   width: 120px !important;
   height: 120px !important;
@@ -344,8 +346,20 @@ html, body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   pointer-events: none;
   inset: auto !important;
+  margin: 0 !important;
+  padding: 0 !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+  min-width: 120px !important;
+  min-height: 120px !important;
+  max-width: 120px !important;
+  max-height: 120px !important;
+  /* Additional centering fallbacks */
+  translate: -50% -50% !important;
+  -webkit-transform: translate(-50%, -50%) !important;
+  -moz-transform: translate(-50%, -50%) !important;
+  -ms-transform: translate(-50%, -50%) !important;
+  -o-transform: translate(-50%, -50%) !important;
 }
 
 .spinner {
