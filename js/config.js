@@ -20,6 +20,8 @@ const isMobile = matchMedia('(pointer:coarse)').matches;
 const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
              (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 const isAndroid = /Android/.test(navigator.userAgent);
+const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+const isIOSSafari = isIOS && isSafari;
 const isTouchDevice = isMobile || isIOS || isAndroid || ('ontouchstart' in window);
 
 // PERFORMANCE IMPROVEMENT: More aggressive performance settings for better framerate
@@ -114,6 +116,8 @@ export {
   isMobile,
   isIOS,
   isAndroid,
+  isSafari,
+  isIOSSafari,
   isTouchDevice,
   PERFORMANCE,
   MEDIA_URLS

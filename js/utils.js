@@ -3,6 +3,9 @@ import { isMobile, PERFORMANCE } from './config.js';
 // DOM helper function
 const $ = id => document.getElementById(id);
 
+// Make the $ function available globally as a fallback
+window.$ = window.$ || $;
+
 // Spinner control variables and functions
 let spinnerTimeout = null;
 let spinnerActive = false;

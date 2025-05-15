@@ -1,3 +1,9 @@
+// Import the $ function for selecting DOM elements
+import { $, showSpinner, hideSpinner, setupCleanup } from './js/utils.js';
+
+// Import setupSyncInterval from videoManager
+import { setupSyncInterval as videoManagerSyncInterval } from './js/videoManager.js';
+
 // Configuration constants
 // Import config values to ensure they're properly used
 import { 
@@ -11,7 +17,8 @@ import {
   devToggleAllowed as ConfigDevToggleAllowed,
   isMobile as ConfigIsMobile,
   PERFORMANCE as ConfigPERFORMANCE,
-  isIOS as ConfigIsIOS
+  isIOS as ConfigIsIOS,
+  isIOSSafari as ConfigIsIOSSafari
 } from './js/config.js';
 
 // Use imported values or fallback to local
@@ -40,6 +47,7 @@ const deviceCapabilities = {
   videoFrameCallbackSupported: false, // Will be determined after video element is created
   estimatedBandwidth: 0, // Will be estimated during load
   isAppleDevice: ConfigIsIOS, // Use the improved detection from config.js
+  isIOSSafari: ConfigIsIOSSafari, // Use Safari-specific detection for better iOS handling
   batteryLevel: null,
   lowPowerMode: false
 };
@@ -756,7 +764,6 @@ function setupMobileOrientationControls() {
 }
 
 window.addEventListener('DOMContentLoaded',()=>{
- const $=id=>document.getElementById(id);
  const audio=$('audioPlayer'),video=$('video360'),vs=$('videoSource');
  const art=$('artworkImg'),track=$('trackInfo'),camera=$('cameraEntity');
  const recBtn=$('recenterButton'),modeBtn=$('toggleModeButton'),devBtn=$('devToggleButton');
@@ -1042,11 +1049,27 @@ window.addEventListener('DOMContentLoaded',()=>{
    setTimeout(ensureSpinnerCentered, 300);
  });
 
- // Modified spinner control with centering
+ // Add a global safety timer to ensure spinner is always hidden eventually
+ let globalSpinnerSafetyTimer = null;
+
+ // Modified spinner control with centering and safety timeout
  const showSpinner = () => {
    if (spinnerTimeout) {
      clearTimeout(spinnerTimeout);
    }
+   
+   // Clear any existing safety timer
+   if (globalSpinnerSafetyTimer) {
+     clearTimeout(globalSpinnerSafetyTimer);
+   }
+   
+   // Set a new safety timer - force hide after 20 seconds no matter what
+   globalSpinnerSafetyTimer = setTimeout(() => {
+     console.log("Safety timeout triggered - forcing spinner to hide");
+     spinner.style.display = 'none';
+     spinnerActive = false;
+   }, 20000);
+   
    if (!spinnerActive) {
      // Ensure proper centering BEFORE showing the spinner
      ensureSpinnerCentered();
@@ -1057,11 +1080,18 @@ window.addEventListener('DOMContentLoaded',()=>{
      spinnerActive = true;
    }
  };
- 
+
  const hideSpinner = () => {
    if (spinnerTimeout) {
      clearTimeout(spinnerTimeout);
    }
+   
+   // Clear safety timer when deliberately hiding
+   if (globalSpinnerSafetyTimer) {
+     clearTimeout(globalSpinnerSafetyTimer);
+     globalSpinnerSafetyTimer = null;
+   }
+   
    // Add delay before hiding to prevent flashes
    spinnerTimeout = setTimeout(() => {
      spinner.style.display = 'none';
@@ -1361,31 +1391,28 @@ window.addEventListener('DOMContentLoaded',()=>{
  });
  
  video.addEventListener('loadeddata',()=>{
-   console.log("Video data loaded");
-   videoReady=true;
-   updateXrButton();
-   
-   // Force renderer update
-   if(window.AFRAME && AFRAME.scenes[0]) {
-     AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-     
-     // Ensure videosphere is visible after video loads
-     if(videosphere) {
-       videosphere.setAttribute('visible', 'true');
-     }
-   }
-   
-   hideSpinner();
-   
-   // Start texture updates if in XR mode
-   if(xrMode) {
-     startTextureUpdates();
-   }
-   
-   // For mobile, try to play muted video once it's loaded
-   if(isMobile && xrMode) {
-     safePlayVideo().catch(e => console.log("Auto-play attempt after load failed:", e));
-   }
+  console.log("Video loaded");
+  videoReady=true;
+  updateXrButton();
+  
+  // If we're already in XR mode (from Begin button click),
+  // attempt to play the video if audio is also playing
+  if (xrMode && audioReady && !audio.paused) {
+    console.log("Video loaded while in XR mode with audio playing - starting video playback");
+    safePlayVideo().catch(e => {
+      console.error("Failed to play video after loading:", e);
+    });
+  }
+  
+  // Force a render now that video is ready
+  if (xrMode) {
+    setTimeout(() => {
+      forceAFrameRender();
+    }, 100);
+  }
+  
+  // Hide spinner if it's still showing
+  hideSpinner();
  });
  
  // ENHANCEMENT: Improved buffer monitoring system
@@ -1703,8 +1730,19 @@ window.addEventListener('DOMContentLoaded',()=>{
      document.addEventListener('a-scene-loaded', recenterWhenReady);
    }
    
-   xrMode=!xrMode;
+   // Do not toggle XR mode here - it should be controlled by the begin button
+   // xrMode=!xrMode;  // <- This line was causing problems
+   
+   // Update layout with current state
    layout();
+   
+   // If video is ready and playing, sync it with audio
+   if (xrMode && videoReady && !video.paused && !audio.paused) {
+     video.currentTime = audio.currentTime;
+   }
+   
+   // Hide spinner if it's still showing
+   hideSpinner();
  });
  
  // Playback events
@@ -1844,76 +1882,89 @@ window.addEventListener('DOMContentLoaded',()=>{
  });
  
  begin.addEventListener('click',async()=>{
+   // Prevent double-clicks and ensure button is only pressed once
+   if (begin.disabled) return;
+   begin.disabled = true;
+   
+   // Hide landing overlay immediately to provide user feedback
+   landing.style.display='none';
+   
+   // Show spinner while initializing
+   showSpinner();
+   
+   // Set XR mode to true immediately so the layout renders correctly
+   xrMode = true;
+   
+   // Configure video quality based on device capabilities
+   configureVideoForDevice();
+   
+   // Update layout with current XR mode status
+   layout();
+   
+   // Special handling for iOS Safari - delay before checking for permissions to fix iOS Safari issues
+   // This helps overcome timing issues on iPhones where permission dialogs can get stuck
+   if(deviceCapabilities.isIOSSafari) {
+     console.log("iOS Safari detected, using special permission handling flow");
+     showUserMessage("Initializing tour...", 2000);
+     
+     // Wait for a longer delay before proceeding on iOS Safari specifically
+     await new Promise(resolve => setTimeout(resolve, 800));
+   } else if(deviceCapabilities.isAppleDevice) {
+     console.log("iOS device detected, using standard iOS flow");
+     showUserMessage("Initializing tour...", 2000);
+     
+     // Wait for a small delay before proceeding on other iOS browsers
+     await new Promise(resolve => setTimeout(resolve, 500));
+   }
+   
+   // Request device orientation permission only on supported mobile devices
+   let permissionPromise = Promise.resolve(); // Default to resolved promise
+   
    if(isMobile && typeof DeviceOrientationEvent !== 'undefined'){
-     if (DeviceOrientationEvent.requestPermission) {
-       try{
-         // Show spinner during permission request
-         showSpinner();
+     if (DeviceOrientationEvent.requestPermission && typeof DeviceOrientationEvent.requestPermission === 'function') {
+       try {
          showUserMessage("Requesting device motion access...", 2000);
          
-         const permissionState = await DeviceOrientationEvent.requestPermission();
-         
-         if (permissionState === 'granted') {
-           showUserMessage("Device motion access granted", 1500);
+         // On iOS, use a simpler approach to request permissions with proper error handling
+         try {
+           const permissionState = await DeviceOrientationEvent.requestPermission();
            
-           // ENHANCEMENT: Add a flag to indicate device orientation permission was granted
-           window.deviceOrientationEnabled = true;
-           
-           // Set up orientation event listener to detect when events start firing
-           window.addEventListener('deviceorientation', function(event) {
-             // Only log once
-             if (!window.hasOrientationListener) {
-               console.log("Device orientation events are active");
-               window.hasOrientationListener = true;
-               
-               // Apply standardized mobile orientation controls
-               setupMobileOrientationControls();
-             }
-           });
-         } else {
-           // Permission denied - show helpful message
-           showErrorMessage("Device orientation access denied. The 360° view requires motion sensors for full immersion. You can still navigate using touch, but moving your device won't change the view.", false);
-           
-           // ENHANCEMENT: Set specific flag indicating permission was denied
+           if (permissionState === 'granted') {
+             showUserMessage("Device motion access granted", 1500);
+             window.deviceOrientationEnabled = true;
+             setupMobileOrientationControls();
+           } else {
+             showUserMessage("Using touch controls instead", 2000);
+             window.deviceOrientationEnabled = false;
+             window.deviceOrientationDenied = true;
+             setupMobileFallbackControls();
+           }
+         } catch(permissionError) {
+           console.error("Permission request error:", permissionError);
+           showUserMessage("Using touch controls", 2000);
            window.deviceOrientationEnabled = false;
-           window.deviceOrientationDenied = true;
-           
-           // Use standardized fallback controls
+           window.deviceOrientationError = true;
            setupMobileFallbackControls();
-           
-           // We can still continue but with no motion tracking
-           setTimeout(() => {
-             errorContainer.style.display = 'none';
-             showUserMessage("Using touch controls instead. Swipe to look around.", 3000);
-           }, 4000);
          }
        } catch(e) {
-         console.error("Permission error:", e);
-         showUserMessage("Could not access motion sensors - using touch controls instead", 2500);
-         
-         // ENHANCEMENT: Set flag indicating permission error
+         console.error("Error in device orientation permission flow:", e);
          window.deviceOrientationEnabled = false;
-         window.deviceOrientationError = true;
-         
-         // Use standardized fallback controls
          setupMobileFallbackControls();
-       } finally {
-         hideSpinner();
+         showUserMessage("Using touch controls", 1500);
        }
      } else {
-       // ENHANCEMENT: Handle non-iOS devices that support device orientation without permission
+       // Non-iOS mobile devices
        console.log("Device orientation available without explicit permission");
        window.deviceOrientationEnabled = true;
        
        // Check if orientation events are actually firing
        let orientationEventDetected = false;
+       
        const detectOrientation = (event) => {
          if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
            orientationEventDetected = true;
            window.removeEventListener('deviceorientation', detectOrientation);
            console.log("Device orientation events confirmed");
-           
-           // Apply standardized mobile orientation controls
            setupMobileOrientationControls();
          }
        };
@@ -1925,85 +1976,103 @@ window.addEventListener('DOMContentLoaded',()=>{
          if (!orientationEventDetected) {
            console.log("No device orientation events detected, falling back to touch");
            window.deviceOrientationEnabled = false;
-           
-           // Use standardized fallback controls
            setupMobileFallbackControls();
-           showUserMessage("Device orientation not available. Using touch controls.", 2500);
+           showUserMessage("Using touch controls", 2000);
          }
        }, 1000);
      }
    } else if (isMobile) {
-     // ENHANCEMENT: Handle case where DeviceOrientationEvent is undefined
+     // Mobile device without orientation API
      console.log("DeviceOrientationEvent API not available on this mobile device");
      window.deviceOrientationEnabled = false;
-     
-     // Use standardized fallback controls
      setupMobileFallbackControls();
-     showUserMessage("Using touch controls (device motion not supported on this device)", 2500);
+     showUserMessage("Using touch controls", 2000);
+   } else {
+     // Desktop device
+     setupDesktopCameraControls();
+     showUserMessage("Using mouse controls", 2000);
    }
    
-   landing.style.display='none';
-   
-   // Configure video quality based on device capabilities
-   configureVideoForDevice();
-   
-   // ENHANCEMENT: Check network quality before starting
-   checkNetworkQuality();
-   
-   // For mobile, try to play muted video first to help with autoplay restrictions
-   if(isMobile && xrMode && videoReady) {
-     video.muted = true;
-     video.play().catch(e => console.log("Initial click video play:", e));
-   }
-   
-   // Start audio with better error handling
-   audio.load();
-   showUserMessage("Loading audio track...", 2000);
-   
-   audio.play().then(()=>{
-     // If we want to start paused, uncomment: audio.pause()
-     showUserMessage("Playback started", 1500);
-   }).catch((e)=>{
-     console.error("Audio play error:", e);
-     showUserMessage("Tap again to start audio playback", 0); // Persistent message
-     
-     // Create one-time click handler to retry audio
-     document.addEventListener('click', function retryAudio() {
-       audio.play().catch(err => {
-         console.error("Retry audio play failed:", err);
-         showErrorMessage("Could not start audio playback. Please ensure your device allows audio playback.", true);
-       });
-       
-       // Remove message and listener
-       let messageEl = document.getElementById('userMessage');
-       if (messageEl) messageEl.classList.remove('visible');
-       document.removeEventListener('click', retryAudio);
-     }, { once: true });
-   });
-   
-   // Force A-Frame to update its rendering
-   if(window.AFRAME) {
+   // Force a render to update the scene with new settings
+   if(window.AFRAME && AFRAME.scenes[0]) {
      setTimeout(() => {
-       // Trigger a resize event to force A-Frame to re-render
        window.dispatchEvent(new Event('resize'));
-       
-       // Additional explicit rendering calls with increasing delays
-       const renderAttempts = isMobile ? [100, 500] : [100, 300, 800, 1500];
-       renderAttempts.forEach(delay => {
-         setTimeout(() => {
-           if(AFRAME.scenes[0] && AFRAME.scenes[0].renderer) {
-             console.log(`Forcing render at ${delay}ms`);
-             AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
-             
-             // Ensure videosphere is visible during each render attempt
-             if(videosphere) {
-               videosphere.setAttribute('visible', 'true');
-             }
-           }
-         }, delay);
-       });
-     }, 100);
+       if(AFRAME.scenes[0].renderer) {
+         AFRAME.scenes[0].renderer.render(AFRAME.scenes[0].object3D, AFRAME.scenes[0].camera);
+       }
+     }, 200);
    }
+   
+   // Proceed with media loading
+   try {
+     // Load audio first
+     audio.load();
+     showUserMessage("Loading audio...", 1500);
+     
+     // For mobile, try to play muted video to bypass autoplay restrictions
+     if(isMobile && videoReady) {
+       video.muted = true;
+       video.play().catch(e => console.log("Initial video play attempt:", e));
+     }
+     
+     // On iOS, we need to ensure user interaction for audio playback
+     if(deviceCapabilities.isAppleDevice) {
+       showUserMessage("Tap screen to start audio", 0); // Persistent message
+       
+       // Create a one-time tap handler for iOS
+       const iosTapHandler = () => {
+         document.removeEventListener('click', iosTapHandler);
+         document.removeEventListener('touchend', iosTapHandler);
+         
+         // Clear persistent message
+         let messageEl = document.getElementById('userMessage');
+         if (messageEl) messageEl.classList.remove('visible');
+         
+         // Try to play audio
+         audio.play().catch(err => {
+           console.error("iOS audio play error:", err);
+           showUserMessage("Tap again for audio", 0);
+         });
+       };
+       
+       document.addEventListener('click', iosTapHandler, { once: true });
+       document.addEventListener('touchend', iosTapHandler, { once: true });
+     } else {
+       // Non-iOS devices can try to play audio directly
+       try {
+         await audio.play();
+         showUserMessage("Playback started", 1500);
+       } catch(e) {
+         console.error("Audio play error:", e);
+         showUserMessage("Tap to start audio", 0); // Persistent message
+         
+         // Create one-time click handler to retry audio
+         document.addEventListener('click', function retryAudio() {
+           audio.play().catch(err => console.error("Retry audio play failed:", err));
+           
+           // Remove message and listener
+           let messageEl = document.getElementById('userMessage');
+           if (messageEl) messageEl.classList.remove('visible');
+           document.removeEventListener('click', retryAudio);
+         }, { once: true });
+       }
+     }
+   } catch(e) {
+     console.error("Media loading error:", e);
+   } finally {
+     // Always hide spinner to prevent it getting stuck
+     hideSpinner();
+     
+     // Re-enable the button after a delay in case user goes back
+     setTimeout(() => {
+       begin.disabled = false;
+     }, 2000);
+   }
+   
+   // Ensure spinner is hidden after a maximum timeout
+   setTimeout(() => {
+     hideSpinner();
+   }, 8000);
  });
  
  xrModeBtn.addEventListener('click', () => {
@@ -2025,20 +2094,13 @@ window.addEventListener('DOMContentLoaded',()=>{
    }, 50);
  });
 
- // Add a setupSyncInterval function if it doesn't exist
+ // Replace the local setupSyncInterval function with a proper call to the imported one
  let syncInterval;
  const setupSyncInterval = () => {
    if (syncInterval) clearInterval(syncInterval);
    
-   syncInterval = setInterval(() => {
-     if (!video || !xrMode || !videoReady || video.paused || audio.paused) return;
-     
-     // Simple sync - adjust video time if too far from audio
-     const diff = Math.abs(video.currentTime - audio.currentTime);
-     if (diff > 0.5) {
-       video.currentTime = audio.currentTime;
-     }
-   }, 1000);
+   // Call the proper implementation from videoManager
+   syncInterval = videoManagerSyncInterval(video, audio, videoReady, xrMode);
    
    return syncInterval;
  };
@@ -2161,3 +2223,45 @@ window.addEventListener('beforeunload', () => {
     audio.load();
   }
 }); 
+
+// Add a direct handler for the begin-tour-clicked event to handle potential module loading issues
+window.addEventListener('begin-tour-clicked', function() {
+  console.log("Begin tour custom event received");
+  // Try to simulate the begin button click if it didn't work through normal paths
+  const begin = document.getElementById('beginBtn');
+  if (begin && typeof window.startTour !== 'function') {
+    // Create a global startTour function that can be called directly
+    window.startTour = async function() {
+      console.log("Starting tour via global function");
+      const landing = document.getElementById('landingOverlay');
+      const spinner = document.getElementById('loadingSpinner');
+      
+      // Hide landing and show spinner
+      if (landing) landing.style.display = 'none';
+      if (spinner) spinner.style.display = 'flex';
+      
+      // Set up audio playback
+      const audio = document.getElementById('audioPlayer');
+      if (audio) {
+        try {
+          await audio.play();
+        } catch(e) {
+          console.error("Audio play error via fallback handler:", e);
+          // Add click handler to body to try again on user interaction
+          document.body.addEventListener('click', function bodyClickHandler() {
+            audio.play().catch(err => console.error("Retry audio play failed:", err));
+            document.body.removeEventListener('click', bodyClickHandler);
+          }, { once: true });
+        }
+      }
+      
+      // Hide spinner after a delay
+      setTimeout(() => {
+        if (spinner) spinner.style.display = 'none';
+      }, 2000);
+    };
+    
+    // Execute the tour start function
+    window.startTour();
+  }
+});

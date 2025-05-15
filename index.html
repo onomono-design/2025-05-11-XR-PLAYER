@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- Favicon -->
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎧</text></svg>">
 <!-- Initial setup to ensure CTA is hidden and teaser mode is off -->
 <script>
   window.isTeaser = false;
@@ -240,6 +242,20 @@ document.addEventListener('DOMContentLoaded', function() {
     overlay.classList.add('initially-hidden');
   }
   
+  // Add direct event handler for begin button to ensure it works regardless of module loading
+  var beginBtn = document.getElementById('beginBtn');
+  var landingOverlay = document.getElementById('landingOverlay');
+  if (beginBtn && landingOverlay) {
+    beginBtn.addEventListener('click', function() {
+      console.log("Begin button clicked via direct handler");
+      landingOverlay.style.display = 'none';
+      // If this direct handler is triggered, we'll also try to manually initialize
+      if (window.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('begin-tour-clicked'));
+      }
+    });
+  }
+  
   // Ensure inertia on camera controls
   const cameraEntity = document.getElementById('cameraEntity');
   if (cameraEntity) {
@@ -272,6 +288,6 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 });
 </script>
-<script src="script.js" type="module"></script>
+<script src="script.js" type="module" crossorigin="anonymous"></script>
 </body>
 </html>
